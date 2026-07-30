@@ -335,11 +335,6 @@ async function init() {
   if (!state.activeSectionId || !state.sections.find((s) => s.id === state.activeSectionId)) {
     state.activeSectionId = state.sections[0]?.id || null;
   }
-  // PC 端始终展开侧边栏（防止旧版 localStorage 状态导致侧边栏被隐藏）
-  if (window.innerWidth > 820) {
-    state.sidebarHidden = false;
-    savePrefs();
-  }
   applySidebar();
   bindGlobalEvents();
   renderSidebar();
@@ -417,15 +412,12 @@ function renderSidebar() {
     item.innerHTML = `
       <span class="sec-icon">${esc(s.icon || "📁")}</span>
       <span class="sec-name">${esc(s.name)}</span>
-      <button class="sec-del" data-delsec="${s.id}" title="删除板块">✕</button>
       <span class="sec-count">${count}</span>`;
     item.onclick = () => {
       state.activeSectionId = s.id; state.view = "section"; savePrefs();
       if (window.innerWidth <= 820) { state.sidebarHidden = true; applySidebar(); }
       renderSidebar(); renderMain();
     };
-    const secDelBtn = item.querySelector(".sec-del");
-    if (secDelBtn) secDelBtn.onclick = (e) => { e.stopPropagation(); deleteSection(s.id); };
     bindSectionDnD(item, s.id);
     list.appendChild(item);
   }
