@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="碎知识 Kitty · 个人知识收纳，私人知识碎片管理工具">
+  <meta name="theme-color" content="#FF69B4">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="碎知识Kitty">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <link rel="stylesheet" href="./styles.css">
+  <title>🎀 碎知识 Kitty · 个人知识收纳</title>
+</head>
+<body>
+  <!-- Top Navigation -->
+  <nav class="top-nav">
+    <div class="nav-left">
+      <span class="logo">🎀</span>
+      <span class="logo-text">碎知识 Kitty</span>
+    </div>
+    <div class="nav-right">
+      <button class="nav-btn" id="navHome" title="首页">🏠</button>
+      <button class="nav-btn" id="navSearch" title="搜索">🔍</button>
+      <button class="nav-btn" id="navSettings" title="设置">⚙️</button>
+    </div>
+  </nav>
+
+  <!-- Main Container -->
+  <main class="container">
+    <!-- Home View: Category Cards -->
+    <section id="homeView" class="view active">
+      <div class="view-header">
+        <h1 class="view-title">🌸 我的碎知识</h1>
+        <p class="view-subtitle">私人知识收纳 · 点一下进入对应模块</p>
+      </div>
+      <div id="categoryGrid" class="category-grid"></div>
+      <button class="fab" id="addCategoryBtn" title="新建分类">＋</button>
+    </section>
+
+    <!-- Category Detail View -->
+    <section id="categoryView" class="view">
+      <div class="view-header">
+        <button class="back-btn" id="backToHome">← 返回</button>
+        <h1 class="view-title" id="categoryTitle">分类详情</h1>
+        <p class="view-subtitle" id="categorySubtitle"></p>
+      </div>
+      <div class="action-bar">
+        <button class="action-btn" id="addSubModuleBtn">＋ 子模块</button>
+        <button class="action-btn" id="addRecordBtn">＋ 记录</button>
+        <button class="action-btn danger" id="deleteCategoryBtn">删除分类</button>
+      </div>
+      <div id="subModuleList" class="submodule-list"></div>
+      <div id="recordList" class="record-list"></div>
+      <div id="emptyCategoryState" class="empty-state" style="display:none;">
+        <p>🌱 还没有任何内容</p>
+        <p class="empty-hint">点击上方按钮添加子模块或记录</p>
+      </div>
+    </section>
+
+    <!-- Search View -->
+    <section id="searchView" class="view">
+      <div class="view-header">
+        <button class="back-btn" id="backToHomeFromSearch">← 返回</button>
+        <h1 class="view-title">🔍 搜索</h1>
+      </div>
+      <div class="search-box">
+        <input type="search" id="searchInput" placeholder="搜索标题、内容或标签..." autocomplete="off">
+      </div>
+      <div id="searchResults" class="search-results"></div>
+    </section>
+  </main>
+
+  <!-- Modal: Category Form -->
+  <div class="modal" id="categoryModal" style="display:none;">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <h2 id="categoryModalTitle">新建分类</h2>
+      <div class="form-group">
+        <label>图标 (Emoji)</label>
+        <input type="text" id="categoryEmoji" placeholder="例如：📚" maxlength="4">
+      </div>
+      <div class="form-group">
+        <label>名称</label>
+        <input type="text" id="categoryName" placeholder="例如：公考知识" maxlength="20">
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-secondary" id="cancelCategoryBtn">取消</button>
+        <button class="btn btn-primary" id="saveCategoryBtn">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: SubModule Form -->
+  <div class="modal" id="subModuleModal" style="display:none;">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <h2 id="subModuleModalTitle">新建子模块</h2>
+      <div class="form-group">
+        <label>名称</label>
+        <input type="text" id="subModuleName" placeholder="例如：行测" maxlength="20">
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-secondary" id="cancelSubModuleBtn">取消</button>
+        <button class="btn btn-primary" id="saveSubModuleBtn">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Record Form -->
+  <div class="modal" id="recordModal" style="display:none;">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <h2 id="recordModalTitle">新建记录</h2>
+      <div class="form-group">
+        <label>所属子模块</label>
+        <select id="recordSubModule"></select>
+      </div>
+      <div class="form-group">
+        <label>标题</label>
+        <input type="text" id="recordTitle" placeholder="知识的标题" maxlength="50">
+      </div>
+      <div class="form-group">
+        <label>内容</label>
+        <textarea id="recordContent" placeholder="详细记录知识内容..." rows="6"></textarea>
+      </div>
+      <div class="form-group">
+        <label>标签 (用逗号分隔)</label>
+        <input type="text" id="recordTags" placeholder="例如：公式, 资料分析" maxlength="50">
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-secondary" id="cancelRecordBtn">取消</button>
+        <button class="btn btn-primary" id="saveRecordBtn">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Settings -->
+  <div class="modal" id="settingsModal" style="display:none;">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <h2>⚙️ 设置</h2>
+      <div class="settings-section">
+        <h3>数据备份</h3>
+        <p class="settings-hint">数据存储在浏览器本地，建议定期导出备份。</p>
+        <div class="form-actions">
+          <button class="btn btn-secondary" id="exportDataBtn">📤 导出数据</button>
+          <button class="btn btn-secondary" id="importDataBtn">📥 导入数据</button>
+          <input type="file" id="importFile" accept=".json" style="display:none;">
+        </div>
+      </div>
+      <div class="settings-section">
+        <h3>危险操作</h3>
+        <button class="btn btn-danger" id="clearDataBtn">🗑️ 清空所有数据</button>
+      </div>
+      <div class="settings-section">
+        <h3>关于</h3>
+        <p class="settings-hint">🎀 碎知识 Kitty · 个人知识收纳</p>
+        <p class="settings-hint">版本 1.0.0 · 数据存储在浏览器本地</p>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" id="closeSettingsBtn">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Confirm -->
+  <div class="modal" id="confirmModal" style="display:none;">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <h2 id="confirmTitle">确认操作</h2>
+      <p id="confirmMessage" class="confirm-message"></p>
+      <div class="form-actions">
+        <button class="btn btn-secondary" id="confirmCancelBtn">取消</button>
+        <button class="btn btn-danger" id="confirmOkBtn">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast"></div>
+
+  <script src="./script.js"></script>
+  <script>
+    // Register Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch((err) => {
+          console.log('SW registration failed:', err);
+        });
+      });
+    }
+  </script>
+</body>
+</html>
