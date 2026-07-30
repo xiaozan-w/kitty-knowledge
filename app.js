@@ -177,12 +177,12 @@ function openDB() {
 const store = (name, mode) => db.transaction(name, mode).objectStore(name);
 const put_ = (name, v) => new Promise((res, rej) => {
   const r = store(name, "readwrite").put(v);
-  r.onsuccess = () => { res(v); };
+  r.onsuccess = () => { if (BACKEND) scheduleSync(); res(v); };
   r.onerror = () => rej(r.error);
 });
 const del_ = (name, id) => new Promise((res, rej) => {
   const r = store(name, "readwrite").delete(id);
-  r.onsuccess = () => { res(); };
+  r.onsuccess = () => { if (BACKEND) scheduleSync(); res(); };
   r.onerror = () => rej(r.error);
 });
 const all_ = (name) => new Promise((res, rej) => {
@@ -194,8 +194,46 @@ const get_ = (name, id) => new Promise((res, rej) => {
   r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
 });
 
-/* 纯本地存储：仅使用浏览器 IndexedDB，无云端同步 */
-let BACKEND = false; // 预留开关：仅在带后端预览环境时为 true，当前部署不涉及云端同步
+/* ---------- 服务端持久化（带后端的部署环境自动启用） ----------
+ * 浏览器 IndexedDB 仍是本地兜底；当探测到 /api/health 可用时，
+ * 任何一次写入都会把「板块/模块/记录（含上传文件的 base64）」整体
+ * 同步到服务器磁盘（/data/vault.json），从而实现
+ * 「微信 / Chrome 等任意浏览器打开同一网址，看到的都是同一份数据」。
+ * 离线 / file:// 打开则只走 IndexedDB。 */
+let BACKEND = false;
+let _syncTimer = null;
+async function apiGet(p) { const r = await fetch(p, { cache: "no-store" }); if (!r.ok) throw new Error("HTTP " + r.status); return r; }
+async function apiPost(p, obj) {
+  const r = await fetch(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r;
+}
+function scheduleSync() {
+  if (!BACKEND) return;
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(doSync, 600);
+}
+async function doSync() {
+  try {
+    const payload = {
+      app: "pkWorkbench", version: 1, exportedAt: Date.now(),
+      sections: state.sections,
+      modules: state.modules,
+      records: await Promise.all(state.records.map(async (r) => ({
+        ...r,
+        blob: r.blob ? await blobToB64(r.blob) : null,
+        _blobType: r.blob ? r.blob.type : null,
+      }))),
+    };
+    await apiPost("/api/vault", payload);
+  } catch (e) { console.error("sync push failed", e); }
+}
+function decodeRec(r) {
+  if (r && r.blob && r._blobType !== undefined) {
+    try { r.blob = b64ToBlob(r.blob, r._blobType); } catch (_) { r.blob = null; }
+  }
+  return r;
+}
 
 
 async function persistToIDB() {
@@ -268,10 +306,30 @@ async function init() {
   await openDB();
   loadPrefs();
 
-  // 纯本地：仅从浏览器 IndexedDB 加载
+  // 探测后端：能拿到 /api/health 说明运行在带持久化的部署地址上（如 CloudBase 云托管）
+  if (location.protocol === "file:") {
+    BACKEND = false;                       // 单文件离线版不连后端，只用本地库
+  } else {
+    try { await apiGet("/api/health"); BACKEND = true; } catch (_) { BACKEND = false; }
+  }
+
+  // 先以本地 IndexedDB 兜底加载（离线 / file:// 也能用）
   state.sections = await all_("sections");
   state.modules = await all_("modules");
   state.records = await all_("records");
+
+  // 后端可用且有数据 -> 以服务端为准（保证上传的文件跨浏览器/设备都在）
+  if (BACKEND) {
+    try {
+      const v = await (await apiGet("/api/vault")).json();
+      if (v && (v.records?.length || v.sections?.length || v.modules?.length)) {
+        state.sections = v.sections || [];
+        state.modules = v.modules || [];
+        state.records = (v.records || []).map(decodeRec);
+        await persistToIDB();              // 把服务端数据镜像到本地，作为离线兜底
+      }
+    } catch (_) {}
+  }
 
   if (state.sections.length === 0) {
     await seedPresets();
@@ -1479,7 +1537,7 @@ function openSettings() {
         <div class="field">
           <label>联网 AI 代理地址（Cloudflare Worker URL）</label>
           <input type="text" id="s_worker" value="${esc(state.aiWorkerUrl)}" placeholder="https://xxxx.xxx.workers.dev/api/ai" />
-          <div class="hint">部署一个免费的 Cloudflare Worker 代理（见 DEPLOY_AI.md），把 AI Key 藏在 Worker 里，此处填 Worker 地址即可实现真·联网 AI 解析。留空则使用本地文本提取。</div>
+          <div class="hint">部署在 CloudBase 云托管时，AI Key 由服务端代理（/api/ai/doubao），此处留空即可。若你有自己的 AI 代理地址也可填这里。留空则使用本地文本提取。</div>
         </div>
       </div>
       <div class="form-footer">
@@ -1496,6 +1554,9 @@ function openSettings() {
     state.doubaoModel = $("#s_model", overlay).value.trim();
     state.aiWorkerUrl = $("#s_worker", overlay).value.trim();
     savePrefs();
+    if (BACKEND) {
+      try { await apiPost("/api/config", { doubao_api_key: state.doubaoApiKey, doubao_model: state.doubaoModel }); } catch (_) {}
+    }
     overlay.remove();
     toast("设置已保存");
   };

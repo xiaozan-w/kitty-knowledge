@@ -1,0 +1,12 @@
+{
+  "name": "kitty-knowledge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "小琦的碎片库 — 服务端持久层 + 静态托管",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}
