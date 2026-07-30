@@ -1,8 +1,14 @@
-# 部署云端同步（Cloudflare Worker + KV）
+# 部署云端同步（Cloudflare Worker + KV）⚠️ 已废弃
 
-这份指南教你部署一个免费的 Cloudflare Worker，让「小琦的碎片库」在**微信、手机浏览器、电脑浏览器**之间自动同步同一份数据。
+> **此方案已废弃。**
+> 因为 `*.workers.dev` 域名在部分网络环境下无法访问（连接超时），现在改用 **GitHub Gist 同步方案**，不需要部署任何后端。
+> 请直接使用 **`DEPLOY_GIST.md`**。
 
-> 之前 AI 功能用的是另一个 Worker（ai-worker）。同步是一个**独立**的 Worker，互不干扰。
+---
+
+这份文档保留旧步骤作为参考。
+
+## 一、准备
 
 ---
 

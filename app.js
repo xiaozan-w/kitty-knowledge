@@ -208,7 +208,7 @@ async function apiPost(p, obj) {
   return r;
 }
 function scheduleSync() {
-  if (!BACKEND && !state.syncUrl) return;
+  if (!BACKEND && !state.githubToken) return;
   clearTimeout(_syncTimer);
   _syncTimer = setTimeout(doSync, 800);
 }
@@ -223,19 +223,10 @@ async function doSync() {
       _blobType: r.blob ? r.blob.type : null,
     }))),
   };
-  // 优先推送到用户配置的云端同步 Worker
-  if (state.syncUrl && state.vaultKey) {
-    try {
-      const r = await fetch(state.syncUrl.replace(/\/+$/, "") + "/vault", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-vault-key": state.vaultKey },
-        body: JSON.stringify(payload),
-      });
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      const merged = await r.json();
-      if (merged && (merged.sections || merged.records)) mergeRemote(merged);
-      return;
-    } catch (_) { /* 网络异常时静默，下次变更再试 */ }
+  // 优先推送到 GitHub Gist
+  if (state.githubToken) {
+    try { await pushGist(payload); return; }
+    catch (e) { console.error("gist push failed", e); }
   }
   // 回退：带后端的预览环境
   if (BACKEND) {
@@ -243,23 +234,68 @@ async function doSync() {
   }
 }
 
-/* 从云端拉取并合并到本地 */
-async function pullSync() {
-  if (!state.syncUrl || !state.vaultKey) return;
-  try {
-    const r = await fetch(state.syncUrl.replace(/\/+$/, "") + "/vault", {
-      headers: { "x-vault-key": state.vaultKey },
+/* 推送到 GitHub Gist；首次会创建新 Gist并记录 gistId */
+async function pushGist(payload) {
+  const content = JSON.stringify(payload);
+  const headers = {
+    "Accept": "application/vnd.github+json",
+    "Authorization": `token ${state.githubToken}`,
+    "Content-Type": "application/json",
+  };
+  if (state.gistId) {
+    const r = await fetch(`https://api.github.com/gists/${state.gistId}`, {
+      method: "PATCH", headers,
+      body: JSON.stringify({
+        description: "小琦的碎片库 · 云端同步备份",
+        files: { "kitty-vault.json": { content } },
+      }),
     });
     if (!r.ok) throw new Error("HTTP " + r.status);
-    const remote = await r.json();
-    if (!remote || (!remote.sections && !remote.records)) return;
+    return;
+  }
+  const r = await fetch("https://api.github.com/gists", {
+    method: "POST", headers,
+    body: JSON.stringify({
+      description: "小琦的碎片库 · 云端同步备份",
+      public: false,
+      files: { "kitty-vault.json": { content } },
+    }),
+  });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const data = await r.json();
+  if (data && data.id) {
+    state.gistId = data.id;
+    savePrefs();
+    toast(`已创建同步 Gist：${data.id}`);
+  }
+}
+
+/* 从 GitHub Gist 拉取并合并到本地 */
+async function pullSync() {
+  if (!state.githubToken) { toast("请先填 GitHub Token"); return; }
+  if (!state.gistId) { toast("还没有同步 Gist，先点一次「立即同步」创建"); return; }
+  try {
+    const r = await fetch(`https://api.github.com/gists/${state.gistId}`, {
+      headers: {
+        "Accept": "application/vnd.github+json",
+        "Authorization": `token ${state.githubToken}`,
+      },
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+    const file = data.files && data.files["kitty-vault.json"];
+    if (!file) throw new Error("Gist 中找不到 kitty-vault.json");
+    const raw = file.content || await (await fetch(file.raw_url, { cache: "no-store" })).text();
+    const remote = JSON.parse(raw);
+    if (!remote || (!remote.sections && !remote.records)) { toast("云端暂无数据"); return; }
     mergeRemote(remote);
     await persistToIDB();
     renderSidebar();
     renderMain();
-    toast("已从云端同步");
+    toast("已从 GitHub 同步");
   } catch (e) {
     toast("同步拉取失败：" + e.message);
+    console.error("pullSync error", e);
   }
 }
 
@@ -320,8 +356,8 @@ const PRESETS = [
   doubaoModel: "",        // 豆包模型 ID
   timeFilter: "all",      // 时间筛选：all | 7d | 30d | year
   aiWorkerUrl: "",         // 联网 AI 代理（Cloudflare Worker）地址
-  syncUrl: "",             // 云端同步 Worker 地址（Cloudflare）
-  vaultKey: "",            // 保险库密钥（多设备共用同一份数据）
+  githubToken: "",         // GitHub Token（用于 Gist 同步）
+  gistId: "",              // 同步用的 Gist ID
 };
 
 /* UI 偏好持久化（不存知识内容，仅界面状态） */
@@ -336,8 +372,9 @@ function loadPrefs() {
     if (p.view === "splash" || p.view === "home" || p.view === "section" || p.view === "trash") state.view = p.view;
     if (p.gdGroupCollapsed) state.gdGroupCollapsed = p.gdGroupCollapsed;
     if (typeof p.aiWorkerUrl === "string") state.aiWorkerUrl = p.aiWorkerUrl;
-    if (typeof p.syncUrl === "string") state.syncUrl = p.syncUrl;
-    if (typeof p.vaultKey === "string") state.vaultKey = p.vaultKey;
+    if (typeof p.githubToken === "string") state.githubToken = p.githubToken;
+    if (typeof p.gistId === "string") state.gistId = p.gistId;
+    // 兼容旧版一次性迁移：如果还留有旧 Worker 配置但新版未配置，则迁移时丢弃（Worker 已不可用）
   } catch (_) {}
 }
 function savePrefs() {
@@ -350,8 +387,8 @@ function savePrefs() {
     activeSectionId: state.activeSectionId,
     view: state.view,
     aiWorkerUrl: state.aiWorkerUrl,
-    syncUrl: state.syncUrl,
-    vaultKey: state.vaultKey,
+    githubToken: state.githubToken,
+    gistId: state.gistId,
   }));
 }
 
@@ -394,7 +431,7 @@ async function init() {
     state.activeSectionId = state.sections[0]?.id || null;
   }
   // 云端同步：已配置则先拉取并合并，再渲染
-  if (state.syncUrl && state.vaultKey) {
+  if (state.githubToken && state.gistId) {
     try { await pullSync(); } catch (_) {}
   }
   applySidebar();
@@ -1598,14 +1635,14 @@ function openSettings() {
           <div class="hint">部署一个免费的 Cloudflare Worker 代理（见 DEPLOY_AI.md），把 AI Key 藏在 Worker 里，此处填 Worker 地址即可实现真·联网 AI 解析。留空则使用本地文本提取。</div>
         </div>
         <div class="field">
-          <label>☁️ 云端同步服务器地址（Cloudflare Worker URL）</label>
-          <input type="text" id="s_sync" value="${esc(state.syncUrl)}" placeholder="https://kitty-sync.xxx.workers.dev" />
-          <div class="hint">部署同步 Worker（见 DEPLOY_SYNC.md）后，填这里的地址，所有设备共享同一份数据。留空则只在本地保存。</div>
+          <label>☁️ GitHub Token（用于 Gist 同步）</label>
+          <input type="password" id="s_token" value="${esc(state.githubToken)}" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" />
+          <div class="hint">在 GitHub 创建 Personal Access Token，只勾选 <code>gist</code> 权限即可。Token 只存在本地浏览器，用于读写一个私有 Gist。见 DEPLOY_GIST.md。</div>
         </div>
         <div class="field">
-          <label>保险库密钥（多设备填同一个）</label>
-          <input type="text" id="s_vault" value="${esc(state.vaultKey)}" placeholder="自定义口令，例如 xiaoqi2026" />
-          <div class="hint">同一个密钥 = 同一份数据；不同设备必须填相同密钥才能互相同步。</div>
+          <label>Gist ID（多设备填同一个）</label>
+          <input type="text" id="s_gist" value="${esc(state.gistId)}" placeholder="首次留空，点「立即同步」会自动创建" />
+          <div class="hint">同一个 Gist ID = 同一份数据；在新设备上把这个 ID 填过去，就能拉下全部数据。</div>
         </div>
       </div>
       <div class="form-footer">
@@ -1622,8 +1659,8 @@ function openSettings() {
     state.doubaoApiKey = $("#s_apikey", overlay).value.trim();
     state.doubaoModel = $("#s_model", overlay).value.trim();
     state.aiWorkerUrl = $("#s_worker", overlay).value.trim();
-    state.syncUrl = $("#s_sync", overlay).value.trim();
-    state.vaultKey = $("#s_vault", overlay).value.trim();
+    state.githubToken = $("#s_token", overlay).value.trim();
+    state.gistId = $("#s_gist", overlay).value.trim();
     if (BACKEND) {
       try { await apiPost("/api/config", { doubao_api_key: state.doubaoApiKey, doubao_model: state.doubaoModel }); } catch (_) {}
     }
@@ -1632,10 +1669,10 @@ function openSettings() {
     toast("设置已保存");
   };
   $(".btn-sync", overlay).onclick = async () => {
-    state.syncUrl = $("#s_sync", overlay).value.trim();
-    state.vaultKey = $("#s_vault", overlay).value.trim();
+    state.githubToken = $("#s_token", overlay).value.trim();
+    state.gistId = $("#s_gist", overlay).value.trim();
     savePrefs();
-    if (!state.syncUrl || !state.vaultKey) { toast("请先填同步地址和密钥"); return; }
+    if (!state.githubToken) { toast("请先填 GitHub Token"); return; }
     await pullSync();
     scheduleSync();
   };
