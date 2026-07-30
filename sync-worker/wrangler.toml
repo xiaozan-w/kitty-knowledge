@@ -1,0 +1,8 @@
+name = "kitty-sync"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+# 把 VAULT_ID 换成你用 `wrangler kv namespace create VAULT` 得到的 id
+[[kv_namespaces]]
+binding = "VAULT"
+id = "REPLACE_WITH_YOUR_KV_ID"

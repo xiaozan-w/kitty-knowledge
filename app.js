@@ -208,24 +208,76 @@ async function apiPost(p, obj) {
   return r;
 }
 function scheduleSync() {
-  if (!BACKEND) return;
+  if (!BACKEND && !state.syncUrl) return;
   clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(doSync, 600);
+  _syncTimer = setTimeout(doSync, 800);
 }
 async function doSync() {
+  const payload = {
+    app: "pkWorkbench", version: 1, exportedAt: Date.now(),
+    sections: state.sections,
+    modules: state.modules,
+    records: await Promise.all(state.records.map(async (r) => ({
+      ...r,
+      blob: r.blob ? await blobToB64(r.blob) : null,
+      _blobType: r.blob ? r.blob.type : null,
+    }))),
+  };
+  // 优先推送到用户配置的云端同步 Worker
+  if (state.syncUrl && state.vaultKey) {
+    try {
+      const r = await fetch(state.syncUrl.replace(/\/+$/, "") + "/vault", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-vault-key": state.vaultKey },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const merged = await r.json();
+      if (merged && (merged.sections || merged.records)) mergeRemote(merged);
+      return;
+    } catch (_) { /* 网络异常时静默，下次变更再试 */ }
+  }
+  // 回退：带后端的预览环境
+  if (BACKEND) {
+    try { await apiPost("/api/vault", payload); } catch (_) {}
+  }
+}
+
+/* 从云端拉取并合并到本地 */
+async function pullSync() {
+  if (!state.syncUrl || !state.vaultKey) return;
   try {
-    const payload = {
-      app: "pkWorkbench", version: 1, exportedAt: Date.now(),
-      sections: state.sections,
-      modules: state.modules,
-      records: await Promise.all(state.records.map(async (r) => ({
-        ...r,
-        blob: r.blob ? await blobToB64(r.blob) : null,
-        _blobType: r.blob ? r.blob.type : null,
-      }))),
-    };
-    await apiPost("/api/vault", payload);
-  } catch (_) { /* 离线时静默，下次变更再试 */ }
+    const r = await fetch(state.syncUrl.replace(/\/+$/, "") + "/vault", {
+      headers: { "x-vault-key": state.vaultKey },
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const remote = await r.json();
+    if (!remote || (!remote.sections && !remote.records)) return;
+    mergeRemote(remote);
+    await persistToIDB();
+    renderSidebar();
+    renderMain();
+    toast("已从云端同步");
+  } catch (e) {
+    toast("同步拉取失败：" + e.message);
+  }
+}
+
+/* 按 id 合并，updatedAt 较大的一方胜出 */
+function mergeRemote(remote) {
+  state.sections = mergeArr(state.sections, remote.sections || []);
+  state.modules = mergeArr(state.modules, remote.modules || []);
+  state.records = mergeArr(state.records, (remote.records || []).map(decodeRec));
+}
+function mergeArr(a, b) {
+  const map = new Map();
+  for (const x of a) if (x && x.id) map.set(x.id, x);
+  for (const x of b) {
+    if (!x || !x.id) continue;
+    const cur = map.get(x.id);
+    if (!cur || (x.updatedAt || 0) >= (cur.updatedAt || 0)) map.set(x.id, x);
+  }
+  return [...map.values()];
 }
 function decodeRec(r) {
   if (r && r.blob && r._blobType !== undefined) {
@@ -268,6 +320,8 @@ const PRESETS = [
   doubaoModel: "",        // 豆包模型 ID
   timeFilter: "all",      // 时间筛选：all | 7d | 30d | year
   aiWorkerUrl: "",         // 联网 AI 代理（Cloudflare Worker）地址
+  syncUrl: "",             // 云端同步 Worker 地址（Cloudflare）
+  vaultKey: "",            // 保险库密钥（多设备共用同一份数据）
 };
 
 /* UI 偏好持久化（不存知识内容，仅界面状态） */
@@ -282,6 +336,8 @@ function loadPrefs() {
     if (p.view === "splash" || p.view === "home" || p.view === "section" || p.view === "trash") state.view = p.view;
     if (p.gdGroupCollapsed) state.gdGroupCollapsed = p.gdGroupCollapsed;
     if (typeof p.aiWorkerUrl === "string") state.aiWorkerUrl = p.aiWorkerUrl;
+    if (typeof p.syncUrl === "string") state.syncUrl = p.syncUrl;
+    if (typeof p.vaultKey === "string") state.vaultKey = p.vaultKey;
   } catch (_) {}
 }
 function savePrefs() {
@@ -294,6 +350,8 @@ function savePrefs() {
     activeSectionId: state.activeSectionId,
     view: state.view,
     aiWorkerUrl: state.aiWorkerUrl,
+    syncUrl: state.syncUrl,
+    vaultKey: state.vaultKey,
   }));
 }
 
@@ -334,6 +392,10 @@ async function init() {
   }
   if (!state.activeSectionId || !state.sections.find((s) => s.id === state.activeSectionId)) {
     state.activeSectionId = state.sections[0]?.id || null;
+  }
+  // 云端同步：已配置则先拉取并合并，再渲染
+  if (state.syncUrl && state.vaultKey) {
+    try { await pullSync(); } catch (_) {}
   }
   applySidebar();
   bindGlobalEvents();
@@ -995,7 +1057,7 @@ async function addSection() {
   if (!name) return;
   const icon = prompt("板块图标（emoji，可留空用默认）：", "📁") || "📁";
   const order = state.sections.length;
-  const s = { id: uid("sec"), name: name.trim(), icon: icon.trim(), order, custom: true };
+  const s = { id: uid("sec"), name: name.trim(), icon: icon.trim(), order, custom: true, updatedAt: Date.now() };
   await put_("sections", s);
   state.sections.push(s);
   state.activeSectionId = s.id;
@@ -1010,7 +1072,7 @@ async function openAddModule() {
   const name = prompt("在「" + sec.name + "」下新增子模块名称：");
   if (!name) return;
   const order = modulesOf(sec.id).length;
-  const m = { id: uid("mod"), sectionId: sec.id, name: name.trim(), order, custom: true };
+  const m = { id: uid("mod"), sectionId: sec.id, name: name.trim(), order, custom: true, updatedAt: Date.now() };
   await put_("modules", m);
   state.modules.push(m);
   savePrefs();
@@ -1535,8 +1597,19 @@ function openSettings() {
           <input type="text" id="s_worker" value="${esc(state.aiWorkerUrl)}" placeholder="https://xxxx.xxx.workers.dev/api/ai" />
           <div class="hint">部署一个免费的 Cloudflare Worker 代理（见 DEPLOY_AI.md），把 AI Key 藏在 Worker 里，此处填 Worker 地址即可实现真·联网 AI 解析。留空则使用本地文本提取。</div>
         </div>
+        <div class="field">
+          <label>☁️ 云端同步服务器地址（Cloudflare Worker URL）</label>
+          <input type="text" id="s_sync" value="${esc(state.syncUrl)}" placeholder="https://kitty-sync.xxx.workers.dev" />
+          <div class="hint">部署同步 Worker（见 DEPLOY_SYNC.md）后，填这里的地址，所有设备共享同一份数据。留空则只在本地保存。</div>
+        </div>
+        <div class="field">
+          <label>保险库密钥（多设备填同一个）</label>
+          <input type="text" id="s_vault" value="${esc(state.vaultKey)}" placeholder="自定义口令，例如 xiaoqi2026" />
+          <div class="hint">同一个密钥 = 同一份数据；不同设备必须填相同密钥才能互相同步。</div>
+        </div>
       </div>
       <div class="form-footer">
+        <button class="btn-sync">立即同步</button>
         <button class="btn-cancel">取消</button>
         <button class="btn-save">保存设置</button>
       </div>
@@ -1549,11 +1622,22 @@ function openSettings() {
     state.doubaoApiKey = $("#s_apikey", overlay).value.trim();
     state.doubaoModel = $("#s_model", overlay).value.trim();
     state.aiWorkerUrl = $("#s_worker", overlay).value.trim();
+    state.syncUrl = $("#s_sync", overlay).value.trim();
+    state.vaultKey = $("#s_vault", overlay).value.trim();
     if (BACKEND) {
       try { await apiPost("/api/config", { doubao_api_key: state.doubaoApiKey, doubao_model: state.doubaoModel }); } catch (_) {}
     }
+    savePrefs();
     overlay.remove();
     toast("设置已保存");
+  };
+  $(".btn-sync", overlay).onclick = async () => {
+    state.syncUrl = $("#s_sync", overlay).value.trim();
+    state.vaultKey = $("#s_vault", overlay).value.trim();
+    savePrefs();
+    if (!state.syncUrl || !state.vaultKey) { toast("请先填同步地址和密钥"); return; }
+    await pullSync();
+    scheduleSync();
   };
 }
 
