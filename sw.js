@@ -1,11 +1,11 @@
-// Service Worker for 🎀 碎知识 Kitty · 个人知识收纳
-const CACHE_VERSION = 'kitty-v2.7.0';
+// Service Worker for 🎀 小琦的碎片库 · 个人知识收纳
+const CACHE_VERSION = 'kitty-v2.8.0';
 const CACHE_NAME = CACHE_VERSION;
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=10',
-  './app.js?v=10',
+  './styles.css?v=11',
+  './app.js?v=11',
   './index.standalone.html',
   './assets/bg.jpg',
   './assets/logo.png',
@@ -44,7 +44,9 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: cache-first for same-origin, network-first for navigation
+// Fetch:
+// - navigation: network-first (always try fresh HTML)
+// - static assets: stale-while-revalidate (instant paint + background refresh)
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
@@ -53,7 +55,6 @@ self.addEventListener('fetch', (event) => {
   // Skip API calls (won't exist on GitHub Pages, but handle gracefully)
   if (url.pathname.startsWith('/api/')) return;
 
-  // For navigation requests: network-first, fallback to cache (for offline)
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request).then((response) => {
@@ -65,21 +66,19 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For same-origin static assets: cache-first
   if (url.origin === location.origin) {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
-        if (cached) return cached;
-        return fetch(event.request).then((response) => {
-          if (response && response.status === 200 && response.type === 'basic') {
-            const responseClone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseClone);
-            });
-          }
-          return response;
-        });
-      })
+      caches.open(CACHE_NAME).then((cache) =>
+        cache.match(event.request).then((cached) => {
+          const fetched = fetch(event.request).then((response) => {
+            if (response && response.status === 200) {
+              cache.put(event.request, response.clone());
+            }
+            return response;
+          }).catch(() => cached);
+          return cached || fetched;
+        })
+      )
     );
   }
   // Cross-origin requests (e.g. CDN for pdf.js) pass through normally

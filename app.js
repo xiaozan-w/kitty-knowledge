@@ -1564,6 +1564,8 @@ function bindGlobalEvents() {
   $("#toggleSidebar").onclick = () => { state.sidebarHidden = true; savePrefs(); applySidebar(); };
   $("#showSidebar").onclick = () => { state.sidebarHidden = false; savePrefs(); applySidebar(); };
   $("#homeBtn").onclick = () => { state.view = "home"; savePrefs(); renderSidebar(); renderMain(); };
+  const logoEl = document.querySelector(".logo");
+  if (logoEl) logoEl.onclick = () => { state.view = "splash"; savePrefs(); renderMain(); };
   $("#drawerBackdrop").onclick = () => { state.sidebarHidden = true; savePrefs(); applySidebar(); };
   $("#addSectionBtn").onclick = addSection;
   $("#addModuleBtn").onclick = openAddModule;
