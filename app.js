@@ -130,28 +130,12 @@ async function analyzeBlob(blob, fileType) {
   if (fileType === "pdf") { const r = await extractPdfText(blob); text = r.text; pageCount = r.pageCount; }
   else if (fileType === "text") text = await blob.text();
   else if (fileType === "image") text = await extractImageText(blob);
-  // 优先：联网 AI（Cloudflare Worker 免费代理）
+  // 优先：联网 AI（Cloudflare Worker 免费代理，可选）
   if (text.length > 50) {
     const ai = await aiWorkerParse(text);
     if (ai && ai.summary) {
       return { summary: ai.summary, keywords: ai.tags.length ? ai.tags : topKeywords(ai.summary, 6), stats: { chars: text.length, sentences: 0, pageCount } };
     }
-  }
-  // 次选：原后端豆包（仅 CloudStudio 后端场景）
-  if (BACKEND && state.doubaoApiKey && text.length > 50) {
-    try {
-      const aiResult = await apiPost("/api/ai/doubao", {
-        apiKey: state.doubaoApiKey,
-        model: state.doubaoModel || "doubao-pro-32k",
-        prompt: text.slice(0, 8000),
-      });
-      const ai = await aiResult.json();
-      const reply = ai.summary || "";
-      if (reply) {
-        const sum = { summary: reply, keywords: topKeywords(reply, 6), stats: { chars: text.length, sentences: 0, pageCount } };
-        return sum;
-      }
-    } catch (_) { /* 豆包调用失败，回退到本地 */ }
   }
   const sum = summarizeText(text);
   sum.stats.pageCount = pageCount;
@@ -177,12 +161,12 @@ function openDB() {
 const store = (name, mode) => db.transaction(name, mode).objectStore(name);
 const put_ = (name, v) => new Promise((res, rej) => {
   const r = store(name, "readwrite").put(v);
-  r.onsuccess = () => { if (BACKEND) scheduleSync(); res(v); };
+  r.onsuccess = () => { scheduleSync(); res(v); };
   r.onerror = () => rej(r.error);
 });
 const del_ = (name, id) => new Promise((res, rej) => {
   const r = store(name, "readwrite").delete(id);
-  r.onsuccess = () => { if (BACKEND) scheduleSync(); res(); };
+  r.onsuccess = () => { scheduleSync(); res(); };
   r.onerror = () => rej(r.error);
 });
 const all_ = (name) => new Promise((res, rej) => {
@@ -194,26 +178,33 @@ const get_ = (name, id) => new Promise((res, rej) => {
   r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
 });
 
-/* ---------- 服务端持久化（带后端的部署环境自动启用） ----------
- * 浏览器 IndexedDB 仍是本地兜底；当探测到 /api/health 可用时，
- * 任何一次写入都会把「板块/模块/记录（含上传文件的 base64）」整体
- * 同步到服务器磁盘（/data/vault.json），从而实现
- * 「微信 / Chrome 等任意浏览器打开同一网址，看到的都是同一份数据」。
- * 离线 / file:// 打开则只走 IndexedDB。 */
-let BACKEND = false;
-let _syncTimer = null;
-async function apiGet(p) { const r = await fetch(p, { cache: "no-store" }); if (!r.ok) throw new Error("HTTP " + r.status); return r; }
-async function apiPost(p, obj) {
-  const r = await fetch(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  return r;
+/* ---------- LeanCloud 云端同步（免部署，前端直连） ----------
+ * 浏览器 IndexedDB 仍是本地兜底；当在「⚙️ 同步设置」填好 LeanCloud 的
+ * App ID / App Key 后，任意一次写入都会在 800ms 后把整份库（板块/模块/
+ * 记录，含附件 base64）推送到 LeanCloud 云端。微信 / Chrome 等任意浏览器
+ * 打开同一网址、填同一组 App ID/Key，看到的都是同一份数据。
+ * 未配置时完全回退本地，不影响使用。 */
+let LEANCLOUD = false;
+let _lcTimer = null;
+let _lcObjectId = null;        // 云端 KittyVault 记录的 objectId
+const LC_CLASS = "KittyVault";
+const LC_SLOT = "main";
+function lcReady() { return typeof AV !== "undefined" && !!state.leanAppId && !!state.leanAppKey; }
+function initLeanCloud() {
+  if (!lcReady()) { LEANCLOUD = false; return; }
+  try {
+    const serverURL = state.leanServerUrl || `https://${state.leanAppId}.api.lncld.net`;
+    AV.init({ appId: state.leanAppId, appKey: state.leanAppKey, serverURL });
+    LEANCLOUD = true;
+  } catch (_) { LEANCLOUD = false; }
 }
 function scheduleSync() {
-  if (!BACKEND) return;
-  clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(doSync, 600);
+  if (!LEANCLOUD) return;
+  clearTimeout(_lcTimer);
+  _lcTimer = setTimeout(doSync, 800);
 }
 async function doSync() {
+  if (!LEANCLOUD) return;
   try {
     const payload = {
       app: "pkWorkbench", version: 1, exportedAt: Date.now(),
@@ -225,8 +216,41 @@ async function doSync() {
         _blobType: r.blob ? r.blob.type : null,
       }))),
     };
-    await apiPost("/api/vault", payload);
-  } catch (e) { console.error("sync push failed", e); }
+    const q = new AV.Query(LC_CLASS);
+    q.equalTo("slot", LC_SLOT);
+    let obj = await q.first();
+    if (!obj) { obj = new AV.Object(LC_CLASS); obj.set("slot", LC_SLOT); }
+    obj.set("data", payload);
+    obj.set("updatedAt", Date.now());
+    await obj.save();
+    _lcObjectId = obj.id;
+  } catch (e) {
+    console.error("LeanCloud push failed", e);
+    const msg = String((e && e.message) || "");
+    if (msg.includes("too large") || msg.includes("413") || (e && e.code === 413)) {
+      toast("同步失败：数据超过 LeanCloud 单条 16MB 上限，请删除大附件记录");
+    }
+  }
+}
+async function pullLeanCloud() {
+  if (!LEANCLOUD) return;
+  try {
+    const q = new AV.Query(LC_CLASS);
+    q.equalTo("slot", LC_SLOT);
+    const obj = await q.first();
+    if (!obj) return;
+    const payload = obj.get("data");
+    if (!payload || (!payload.sections && !payload.records)) return;
+    state.sections = payload.sections || [];
+    state.modules = payload.modules || [];
+    state.records = (payload.records || []).map(decodeRec);
+    _lcObjectId = obj.id;
+    await persistToIDB();
+    toast("已从云端同步");
+  } catch (e) {
+    console.error("LeanCloud pull failed", e);
+    toast("云端拉取失败：" + ((e && (e.message || e.error)) || "未知错误"));
+  }
 }
 function decodeRec(r) {
   if (r && r.blob && r._blobType !== undefined) {
@@ -271,6 +295,9 @@ const PRESETS = [
   doubaoModel: "",        // 豆包模型 ID
   timeFilter: "all",      // 时间筛选：all | 7d | 30d | year
   aiWorkerUrl: "",         // 联网 AI 代理（Cloudflare Worker 地址，选填）
+  leanAppId: "",           // LeanCloud App ID（云端同步用）
+  leanAppKey: "",          // LeanCloud App Key
+  leanServerUrl: "",       // 可选：自定义 API 域名
 };
 
 /* UI 偏好持久化（不存知识内容，仅界面状态） */
@@ -285,6 +312,9 @@ function loadPrefs() {
     if (p.view === "splash" || p.view === "home" || p.view === "section" || p.view === "trash") state.view = p.view;
     if (p.gdGroupCollapsed) state.gdGroupCollapsed = p.gdGroupCollapsed;
     if (typeof p.aiWorkerUrl === "string") state.aiWorkerUrl = p.aiWorkerUrl;
+    if (typeof p.leanAppId === "string") state.leanAppId = p.leanAppId;
+    if (typeof p.leanAppKey === "string") state.leanAppKey = p.leanAppKey;
+    if (typeof p.leanServerUrl === "string") state.leanServerUrl = p.leanServerUrl;
     // 兼容旧版一次性迁移：如果还留有旧 Worker 配置但新版未配置，则迁移时丢弃（Worker 已不可用）
   } catch (_) {}
 }
@@ -298,6 +328,9 @@ function savePrefs() {
     activeSectionId: state.activeSectionId,
     view: state.view,
     aiWorkerUrl: state.aiWorkerUrl,
+    leanAppId: state.leanAppId,
+    leanAppKey: state.leanAppKey,
+    leanServerUrl: state.leanServerUrl,
   }));
 }
 
@@ -306,29 +339,17 @@ async function init() {
   await openDB();
   loadPrefs();
 
-  // 探测后端：能拿到 /api/health 说明运行在带持久化的部署地址上（如 CloudBase 云托管）
-  if (location.protocol === "file:") {
-    BACKEND = false;                       // 单文件离线版不连后端，只用本地库
-  } else {
-    try { await apiGet("/api/health"); BACKEND = true; } catch (_) { BACKEND = false; }
-  }
+  // 初始化 LeanCloud（若已在设置里填好 App ID / App Key）
+  initLeanCloud();
 
   // 先以本地 IndexedDB 兜底加载（离线 / file:// 也能用）
   state.sections = await all_("sections");
   state.modules = await all_("modules");
   state.records = await all_("records");
 
-  // 后端可用且有数据 -> 以服务端为准（保证上传的文件跨浏览器/设备都在）
-  if (BACKEND) {
-    try {
-      const v = await (await apiGet("/api/vault")).json();
-      if (v && (v.records?.length || v.sections?.length || v.modules?.length)) {
-        state.sections = v.sections || [];
-        state.modules = v.modules || [];
-        state.records = (v.records || []).map(decodeRec);
-        await persistToIDB();              // 把服务端数据镜像到本地，作为离线兜底
-      }
-    } catch (_) {}
+  // LeanCloud 已配置 -> 以云端为准（保证上传的文件跨浏览器/设备都在）
+  if (LEANCLOUD) {
+    try { await pullLeanCloud(); } catch (_) {}
   }
 
   if (state.sections.length === 0) {
@@ -343,10 +364,7 @@ async function init() {
   bindGlobalEvents();
   renderSidebar();
   renderMain();
-  // 加载豆包配置
-  if (BACKEND) {
-    try { const cfg = await (await apiGet("/api/config")).json(); state.doubaoApiKey = cfg.doubao_api_key || ""; state.doubaoModel = cfg.doubao_model || ""; } catch (_) {}
-  }
+  // 豆包 Key 已存于本地偏好，无需云端读取
   // 7 天自动清理 + 定时
   purgeExpired();
   setInterval(purgeExpired, 3600000);
@@ -1521,10 +1539,26 @@ function openSettings() {
     <div class="modal form-modal" style="max-width:420px">
       <div class="modal-head">
         <span class="mh-emoji">⚙️</span>
-        <span class="mh-title">AI 智能概括设置</span>
+        <span class="mh-title">同步与 AI 设置</span>
         <button class="modal-close">×</button>
       </div>
       <div class="form-body">
+        <div class="field-group-title">☁️ 云端同步（LeanCloud，免部署）</div>
+        <div class="field">
+          <label>LeanCloud App ID</label>
+          <input type="text" id="s_lc_id" value="${esc(state.leanAppId)}" placeholder="填入 LeanCloud 应用的 App ID" />
+        </div>
+        <div class="field">
+          <label>LeanCloud App Key</label>
+          <input type="password" id="s_lc_key" value="${esc(state.leanAppKey)}" placeholder="填入 LeanCloud 应用的 App Key" />
+          <div class="hint">在 leancloud.app 免费创建应用，复制「设置 → 应用凭证」里的 App ID 与 App Key。微信 / Chrome 填同一组，即共享同一份数据。详见 DEPLOY_LEANCLOUD.md。</div>
+        </div>
+        <div class="field">
+          <label>API 域名（选填）</label>
+          <input type="text" id="s_lc_url" value="${esc(state.leanServerUrl)}" placeholder="留空则用默认国内域名" />
+        </div>
+
+        <div class="field-group-title">✨ AI 智能概括（选填）</div>
         <div class="field">
           <label>豆包（火山引擎）API Key</label>
           <input type="text" id="s_apikey" value="${esc(state.doubaoApiKey)}" placeholder="填入你的 Doubao API Key（选填，无 Key 时用本地提取）" />
@@ -1537,10 +1571,11 @@ function openSettings() {
         <div class="field">
           <label>联网 AI 代理地址（Cloudflare Worker URL）</label>
           <input type="text" id="s_worker" value="${esc(state.aiWorkerUrl)}" placeholder="https://xxxx.xxx.workers.dev/api/ai" />
-          <div class="hint">部署在 CloudBase 云托管时，AI Key 由服务端代理（/api/ai/doubao），此处留空即可。若你有自己的 AI 代理地址也可填这里。留空则使用本地文本提取。</div>
+          <div class="hint">若你有自己的 AI 代理地址可填这里，否则使用本地文本提取。</div>
         </div>
       </div>
       <div class="form-footer">
+        <button class="btn-sync">立即同步</button>
         <button class="btn-cancel">取消</button>
         <button class="btn-save">保存设置</button>
       </div>
@@ -1550,15 +1585,36 @@ function openSettings() {
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
   $(".btn-cancel", overlay).onclick = () => overlay.remove();
   $(".btn-save", overlay).onclick = async () => {
+    state.leanAppId = $("#s_lc_id", overlay).value.trim();
+    state.leanAppKey = $("#s_lc_key", overlay).value.trim();
+    state.leanServerUrl = $("#s_lc_url", overlay).value.trim();
     state.doubaoApiKey = $("#s_apikey", overlay).value.trim();
     state.doubaoModel = $("#s_model", overlay).value.trim();
     state.aiWorkerUrl = $("#s_worker", overlay).value.trim();
     savePrefs();
-    if (BACKEND) {
-      try { await apiPost("/api/config", { doubao_api_key: state.doubaoApiKey, doubao_model: state.doubaoModel }); } catch (_) {}
+    initLeanCloud();
+    if (LEANCLOUD) {
+      try { await pullLeanCloud(); renderSidebar(); renderMain(); toast("已连接云端并开始同步"); }
+      catch (e) { toast("连接云端失败：" + ((e && e.message) || "请检查 App ID/Key")); }
+    } else if (state.leanAppId || state.leanAppKey) {
+      toast("连接云端失败：请检查 App ID / App Key");
+    } else {
+      toast("设置已保存（未配置云端同步）");
     }
     overlay.remove();
-    toast("设置已保存");
+  };
+  $(".btn-sync", overlay).onclick = async () => {
+    state.leanAppId = $("#s_lc_id", overlay).value.trim();
+    state.leanAppKey = $("#s_lc_key", overlay).value.trim();
+    state.leanServerUrl = $("#s_lc_url", overlay).value.trim();
+    savePrefs();
+    initLeanCloud();
+    if (!LEANCLOUD) { toast("请先填好 LeanCloud 的 App ID / App Key"); return; }
+    await pullLeanCloud();
+    await doSync();
+    renderSidebar();
+    renderMain();
+    toast("已与云端双向同步");
   };
 }
 
