@@ -86,12 +86,12 @@ body::before {
 .logo {
   font-size: 19px; font-weight: 800; color: var(--primary-deep);
   letter-spacing: 1px;
-  display: flex; align-items: center; gap: 4px;
+  display: flex; align-items: center; gap: 8px;
 }
 .logo::before {
   content: "";
   display: inline-block;
-  width: 28px; height: 28px;
+  width: 44px; height: 44px;
   background: url('assets/logo.png') center/contain no-repeat;
   flex-shrink: 0;
 }
