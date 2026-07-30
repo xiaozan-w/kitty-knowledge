@@ -177,12 +177,12 @@ function openDB() {
 const store = (name, mode) => db.transaction(name, mode).objectStore(name);
 const put_ = (name, v) => new Promise((res, rej) => {
   const r = store(name, "readwrite").put(v);
-  r.onsuccess = () => { if (BACKEND) scheduleSync(); res(v); };
+  r.onsuccess = () => { res(v); };
   r.onerror = () => rej(r.error);
 });
 const del_ = (name, id) => new Promise((res, rej) => {
   const r = store(name, "readwrite").delete(id);
-  r.onsuccess = () => { if (BACKEND) scheduleSync(); res(); };
+  r.onsuccess = () => { res(); };
   r.onerror = () => rej(r.error);
 });
 const all_ = (name) => new Promise((res, rej) => {
@@ -206,42 +206,6 @@ async function persistToIDB() {
   for (const s of state.sections) await put_("sections", s);
   for (const m of state.modules) await put_("modules", m);
   for (const r of state.records) await put_("records", r);
-}
-
-/* ---------- 服务端持久化（server.js） ----------
- * 由 server.js 托管时，所有数据（含上传文件的 base64）会写入服务器磁盘
- * /workspace/data/vault.json；上传的附件同时抽成真实文件存于 uploads/。
- * 浏览器 IndexedDB 仍作为离线兜底。 */
-async function apiGet(p) { const r = await fetch(p); if (!r.ok) throw new Error("HTTP " + r.status); return r; }
-async function apiPost(p, obj) {
-  const r = await fetch(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  return r;
-}
-function decodeRec(r) {
-  if (r && r.blob && r._blobType !== undefined) {
-    try { r.blob = b64ToBlob(r.blob, r._blobType); } catch (_) { r.blob = null; }
-  }
-  return r;
-}
-let _syncTimer = null;
-function scheduleSync() {
-  if (!BACKEND) return;
-  clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(doSync, 600);
-}
-async function doSync() {
-  if (!BACKEND) return;
-  try {
-    const records = await Promise.all(state.records.map(async (r) => ({
-      ...r,
-      blob: r.blob ? await blobToB64(r.blob) : null,
-      _blobType: r.blob ? r.blob.type : null,
-    })));
-    const payload = { app: "pkWorkbench", version: 1, exportedAt: Date.now(),
-      sections: state.sections, modules: state.modules, records };
-    await apiPost("/api/vault", payload);
-  } catch (e) { console.error("sync push error", e); }
 }
 
 /* ---------- 状态 ---------- */
@@ -304,50 +268,24 @@ async function init() {
   await openDB();
   loadPrefs();
 
-  // 探测后端：server.js 提供 /api/health 即视为带持久化环境
-  let serverVault = null;
-  try {
-    const h = await apiGet("/api/health");
-    if (h.ok) {
-      BACKEND = true;
-      const v = await apiGet("/api/vault");
-      serverVault = await v.json();
-    }
-  } catch (_) { BACKEND = false; }
-
-  // 本地兜底
+  // 纯本地：仅从浏览器 IndexedDB 加载
   state.sections = await all_("sections");
   state.modules = await all_("modules");
   state.records = await all_("records");
 
-  const serverHas = !!(serverVault && (serverVault.records?.length || serverVault.sections?.length || serverVault.modules?.length));
-  if (BACKEND && serverHas) {
-    // 后端为准：上传的文件真正存在于服务器磁盘，跨设备/刷新都一致
-    state.sections = serverVault.sections || [];
-    state.modules = serverVault.modules || [];
-    state.records = (serverVault.records || []).map(decodeRec);
-    await persistToIDB();                 // 镜像到本地，作为离线兜底
-    if (!state.activeSectionId || !state.sections.find((s) => s.id === state.activeSectionId)) {
-      state.activeSectionId = state.sections[0]?.id || null;
-    }
-  } else {
-    if (state.sections.length === 0) {
-      await seedPresets();
-      state.sections = await all_("sections");
-      state.modules = await all_("modules");
-    }
-    if (!state.activeSectionId || !state.sections.find((s) => s.id === state.activeSectionId)) {
-      state.activeSectionId = state.sections[0]?.id || null;
-    }
-    if (BACKEND && !serverHas && (state.records.length || state.sections.length || state.modules.length)) {
-      scheduleSync();                     // 本地已有数据，推到服务端留存
-    }
+  if (state.sections.length === 0) {
+    await seedPresets();
+    state.sections = await all_("sections");
+    state.modules = await all_("modules");
+  }
+  if (!state.activeSectionId || !state.sections.find((s) => s.id === state.activeSectionId)) {
+    state.activeSectionId = state.sections[0]?.id || null;
   }
   applySidebar();
   bindGlobalEvents();
   renderSidebar();
   renderMain();
-  // 加载豆包配置（来自服务端 config.json，若存在）
+  // 加载豆包配置
   if (BACKEND) {
     try { const cfg = await (await apiGet("/api/config")).json(); state.doubaoApiKey = cfg.doubao_api_key || ""; state.doubaoModel = cfg.doubao_model || ""; } catch (_) {}
   }
@@ -1541,7 +1479,7 @@ function openSettings() {
         <div class="field">
           <label>联网 AI 代理地址（Cloudflare Worker URL）</label>
           <input type="text" id="s_worker" value="${esc(state.aiWorkerUrl)}" placeholder="https://xxxx.xxx.workers.dev/api/ai" />
-          <div class="hint">可选：部署一个 Cloudflare Worker 代理把 AI Key 藏在服务端，此处填 Worker 地址即实现真·联网 AI 解析。留空则用本地提取。提示：用 server.js 托管时，本应用所有数据（含上传文件）已自动写入服务器磁盘（/workspace/data/vault.json）。</div>
+          <div class="hint">部署一个免费的 Cloudflare Worker 代理（见 DEPLOY_AI.md），把 AI Key 藏在 Worker 里，此处填 Worker 地址即可实现真·联网 AI 解析。留空则使用本地文本提取。</div>
         </div>
       </div>
       <div class="form-footer">
@@ -1558,9 +1496,6 @@ function openSettings() {
     state.doubaoModel = $("#s_model", overlay).value.trim();
     state.aiWorkerUrl = $("#s_worker", overlay).value.trim();
     savePrefs();
-    if (BACKEND) {
-      try { await apiPost("/api/config", { doubao_api_key: state.doubaoApiKey, doubao_model: state.doubaoModel }); } catch (_) {}
-    }
     overlay.remove();
     toast("设置已保存");
   };
