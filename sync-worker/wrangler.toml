@@ -1,7 +1,0 @@
-name = "kitty-sync"
-main = "src/index.js"
-compatibility_date = "2024-09-23"
-
-[[kv_namespaces]]
-binding = "VAULT"
-id = "6de5dd7ffaf548c19cf99111236ca187"

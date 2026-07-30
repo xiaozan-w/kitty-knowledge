@@ -177,12 +177,12 @@ function openDB() {
 const store = (name, mode) => db.transaction(name, mode).objectStore(name);
 const put_ = (name, v) => new Promise((res, rej) => {
   const r = store(name, "readwrite").put(v);
-  r.onsuccess = () => { scheduleSync(); res(v); };
+  r.onsuccess = () => { res(v); };
   r.onerror = () => rej(r.error);
 });
 const del_ = (name, id) => new Promise((res, rej) => {
   const r = store(name, "readwrite").delete(id);
-  r.onsuccess = () => { scheduleSync(); res(); };
+  r.onsuccess = () => { res(); };
   r.onerror = () => rej(r.error);
 });
 const all_ = (name) => new Promise((res, rej) => {
@@ -194,143 +194,10 @@ const get_ = (name, id) => new Promise((res, rej) => {
   r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
 });
 
-/* ---------- 服务端持久化（在带后端的预览地址运行时自动启用） ----------
- * 思路：浏览器 IndexedDB 仍是本地兜底；当检测到 /api/vault 可用时，
- * 任何一次写入都会把「板块/模块/记录（含上传文件的 base64）」整体同步到
- * 服务器磁盘（/workspace/data/vault.json），从而实现「上传的文件真正被保存」。
- * 离线 / file:// 打开的单文件版则继续只走 IndexedDB。 */
-let BACKEND = false;
-let _syncTimer = null;
-async function apiGet(p) { const r = await fetch(p); if (!r.ok) throw new Error("HTTP " + r.status); return r; }
-async function apiPost(p, obj) {
-  const r = await fetch(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  return r;
-}
-function scheduleSync() {
-  if (!BACKEND && !state.githubToken) return;
-  clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(doSync, 800);
-}
-async function doSync() {
-  const payload = {
-    app: "pkWorkbench", version: 1, exportedAt: Date.now(),
-    sections: state.sections,
-    modules: state.modules,
-    records: await Promise.all(state.records.map(async (r) => ({
-      ...r,
-      blob: r.blob ? await blobToB64(r.blob) : null,
-      _blobType: r.blob ? r.blob.type : null,
-    }))),
-  };
-  // 优先推送到 GitHub Gist
-  if (state.githubToken) {
-    try { await pushGist(payload); return; }
-    catch (e) { console.error("gist push failed", e); }
-  }
-  // 回退：带后端的预览环境
-  if (BACKEND) {
-    try { await apiPost("/api/vault", payload); } catch (_) {}
-  }
-}
+/* 纯本地存储：仅使用浏览器 IndexedDB，无云端同步 */
+let BACKEND = false; // 预留开关：仅在带后端预览环境时为 true，当前部署不涉及云端同步
 
-/* 推送到 GitHub Gist；首次会创建新 Gist并记录 gistId */
-async function pushGist(payload) {
-  const content = JSON.stringify(payload);
-  if (content.length > 900000) {
-    toast("数据已超过 Gist 1MB 上限，请删除大附件记录后再同步");
-    throw new Error("payload too large for Gist");
-  }
-  const headers = {
-    "Accept": "application/vnd.github+json",
-    "Authorization": `token ${state.githubToken}`,
-    "Content-Type": "application/json",
-  };
-  if (state.gistId) {
-    const r = await fetch(`https://api.github.com/gists/${state.gistId}`, {
-      method: "PATCH", headers,
-      body: JSON.stringify({
-        description: "小琦的碎片库 · 云端同步备份",
-        files: { "kitty-vault.json": { content } },
-      }),
-    });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    return;
-  }
-  const r = await fetch("https://api.github.com/gists", {
-    method: "POST", headers,
-    body: JSON.stringify({
-      description: "小琦的碎片库 · 云端同步备份",
-      public: false,
-      files: { "kitty-vault.json": { content } },
-    }),
-  });
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  const data = await r.json();
-  if (data && data.id) {
-    state.gistId = data.id;
-    savePrefs();
-    toast(`已创建同步 Gist：${data.id}`);
-  }
-}
 
-/* 从 GitHub Gist 拉取并合并到本地 */
-async function pullSync() {
-  if (!state.githubToken) { toast("请先填 GitHub Token"); return; }
-  if (!state.gistId) { toast("还没有同步 Gist，先点一次「立即同步」创建"); return; }
-  try {
-    const r = await fetch(`https://api.github.com/gists/${state.gistId}`, {
-      headers: {
-        "Accept": "application/vnd.github+json",
-        "Authorization": `token ${state.githubToken}`,
-      },
-    });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const data = await r.json();
-    const file = data.files && data.files["kitty-vault.json"];
-    if (!file) throw new Error("Gist 中找不到 kitty-vault.json");
-    const raw = file.content || await (await fetch(file.raw_url, { cache: "no-store" })).text();
-    let remote;
-    try {
-      remote = JSON.parse(raw);
-    } catch (parseErr) {
-      const sizeMB = (raw.length / 1024 / 1024).toFixed(2);
-      throw new Error(`云端数据损坏或超过 Gist 1MB 限制（当前约 ${sizeMB} MB）。请删除大附件记录后重新同步。`);
-    }
-    if (!remote || (!remote.sections && !remote.records)) { toast("云端暂无数据"); return; }
-    mergeRemote(remote);
-    await persistToIDB();
-    renderSidebar();
-    renderMain();
-    toast("已从 GitHub 同步");
-  } catch (e) {
-    toast("同步拉取失败：" + e.message);
-    console.error("pullSync error", e);
-  }
-}
-
-/* 按 id 合并，updatedAt 较大的一方胜出 */
-function mergeRemote(remote) {
-  state.sections = mergeArr(state.sections, remote.sections || []);
-  state.modules = mergeArr(state.modules, remote.modules || []);
-  state.records = mergeArr(state.records, (remote.records || []).map(decodeRec));
-}
-function mergeArr(a, b) {
-  const map = new Map();
-  for (const x of a) if (x && x.id) map.set(x.id, x);
-  for (const x of b) {
-    if (!x || !x.id) continue;
-    const cur = map.get(x.id);
-    if (!cur || (x.updatedAt || 0) >= (cur.updatedAt || 0)) map.set(x.id, x);
-  }
-  return [...map.values()];
-}
-function decodeRec(r) {
-  if (r && r.blob && r._blobType !== undefined) {
-    try { r.blob = b64ToBlob(r.blob, r._blobType); } catch (_) { r.blob = null; }
-  }
-  return r;
-}
 async function persistToIDB() {
   for (const n of ["sections", "modules", "records"]) {
     const all = await all_(n);
@@ -365,9 +232,7 @@ const PRESETS = [
   doubaoApiKey: "",       // 豆包 API Key（从 config 获取）
   doubaoModel: "",        // 豆包模型 ID
   timeFilter: "all",      // 时间筛选：all | 7d | 30d | year
-  aiWorkerUrl: "",         // 联网 AI 代理（Cloudflare Worker）地址
-  githubToken: "",         // GitHub Token（用于 Gist 同步）
-  gistId: "",              // 同步用的 Gist ID
+  aiWorkerUrl: "",         // 联网 AI 代理（Cloudflare Worker 地址，选填）
 };
 
 /* UI 偏好持久化（不存知识内容，仅界面状态） */
@@ -382,8 +247,6 @@ function loadPrefs() {
     if (p.view === "splash" || p.view === "home" || p.view === "section" || p.view === "trash") state.view = p.view;
     if (p.gdGroupCollapsed) state.gdGroupCollapsed = p.gdGroupCollapsed;
     if (typeof p.aiWorkerUrl === "string") state.aiWorkerUrl = p.aiWorkerUrl;
-    if (typeof p.githubToken === "string") state.githubToken = p.githubToken;
-    if (typeof p.gistId === "string") state.gistId = p.gistId;
     // 兼容旧版一次性迁移：如果还留有旧 Worker 配置但新版未配置，则迁移时丢弃（Worker 已不可用）
   } catch (_) {}
 }
@@ -397,8 +260,6 @@ function savePrefs() {
     activeSectionId: state.activeSectionId,
     view: state.view,
     aiWorkerUrl: state.aiWorkerUrl,
-    githubToken: state.githubToken,
-    gistId: state.gistId,
   }));
 }
 
@@ -407,30 +268,10 @@ async function init() {
   await openDB();
   loadPrefs();
 
-  // 探测后端：能拿到 /api/vault 说明运行在带持久化的预览地址上
-  let serverVault = null;
-  if (location.protocol === "file:") {
-    BACKEND = false;                       // 单文件离线版不连后端，只用本地库
-  } else {
-    try { const r = await apiGet("/api/vault"); serverVault = await r.json(); BACKEND = true; }
-    catch (_) { BACKEND = false; }
-  }
-
-  // 先以本地 IndexedDB 兜底加载（离线 / file:// 也能用）
+  // 纯本地：仅从浏览器 IndexedDB 加载
   state.sections = await all_("sections");
   state.modules = await all_("modules");
   state.records = await all_("records");
-
-  // 后端可用且已有数据 -> 以服务端为准（保证上传的文件跨刷新/设备都在）
-  const serverHas = !!(serverVault && (serverVault.records?.length || serverVault.sections?.length || serverVault.modules?.length));
-  if (BACKEND && serverHas) {
-    state.sections = serverVault.sections || [];
-    state.modules = serverVault.modules || [];
-    state.records = (serverVault.records || []).map(decodeRec);
-    await persistToIDB();            // 把服务端数据镜像到本地，作为离线兜底
-  } else if (BACKEND && !serverHas && (state.records.length || state.sections.length || state.modules.length)) {
-    scheduleSync();                  // 本地已有数据，推送到服务端留存
-  }
 
   if (state.sections.length === 0) {
     await seedPresets();
@@ -439,10 +280,6 @@ async function init() {
   }
   if (!state.activeSectionId || !state.sections.find((s) => s.id === state.activeSectionId)) {
     state.activeSectionId = state.sections[0]?.id || null;
-  }
-  // 云端同步：已配置则先拉取并合并，再渲染
-  if (state.githubToken && state.gistId) {
-    try { await pullSync(); } catch (_) {}
   }
   applySidebar();
   bindGlobalEvents();
@@ -1644,19 +1481,8 @@ function openSettings() {
           <input type="text" id="s_worker" value="${esc(state.aiWorkerUrl)}" placeholder="https://xxxx.xxx.workers.dev/api/ai" />
           <div class="hint">部署一个免费的 Cloudflare Worker 代理（见 DEPLOY_AI.md），把 AI Key 藏在 Worker 里，此处填 Worker 地址即可实现真·联网 AI 解析。留空则使用本地文本提取。</div>
         </div>
-        <div class="field">
-          <label>☁️ GitHub Token（用于 Gist 同步）</label>
-          <input type="password" id="s_token" value="${esc(state.githubToken)}" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" />
-          <div class="hint">在 GitHub 创建 Personal Access Token，只勾选 <code>gist</code> 权限即可。Token 只存在本地浏览器，用于读写一个私有 Gist。见 DEPLOY_GIST.md。</div>
-        </div>
-        <div class="field">
-          <label>Gist ID（多设备填同一个）</label>
-          <input type="text" id="s_gist" value="${esc(state.gistId)}" placeholder="首次留空，点「立即同步」会自动创建" />
-          <div class="hint">同一个 Gist ID = 同一份数据；在新设备上把这个 ID 填过去，就能拉下全部数据。</div>
-        </div>
       </div>
       <div class="form-footer">
-        <button class="btn-sync">立即同步</button>
         <button class="btn-cancel">取消</button>
         <button class="btn-save">保存设置</button>
       </div>
@@ -1669,25 +1495,9 @@ function openSettings() {
     state.doubaoApiKey = $("#s_apikey", overlay).value.trim();
     state.doubaoModel = $("#s_model", overlay).value.trim();
     state.aiWorkerUrl = $("#s_worker", overlay).value.trim();
-    state.githubToken = $("#s_token", overlay).value.trim();
-    state.gistId = $("#s_gist", overlay).value.trim();
-    if (BACKEND) {
-      try { await apiPost("/api/config", { doubao_api_key: state.doubaoApiKey, doubao_model: state.doubaoModel }); } catch (_) {}
-    }
     savePrefs();
     overlay.remove();
     toast("设置已保存");
-  };
-  $(".btn-sync", overlay).onclick = async () => {
-    state.githubToken = $("#s_token", overlay).value.trim();
-    state.gistId = $("#s_gist", overlay).value.trim();
-    savePrefs();
-    if (!state.githubToken) { toast("请先填 GitHub Token"); return; }
-    // 先推送（首次会自动创建 Gist 并回填 gistId），再拉取合并
-    try { await doSync(); } catch (e) { console.error("sync push error", e); }
-    // 把自动创建的 Gist ID 写回输入框，方便查看并复制到其他设备
-    if (state.gistId) $("#s_gist", overlay).value = state.gistId;
-    await pullSync();
   };
 }
 
