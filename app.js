@@ -237,6 +237,10 @@ async function doSync() {
 /* 推送到 GitHub Gist；首次会创建新 Gist并记录 gistId */
 async function pushGist(payload) {
   const content = JSON.stringify(payload);
+  if (content.length > 900000) {
+    toast("数据已超过 Gist 1MB 上限，请删除大附件记录后再同步");
+    throw new Error("payload too large for Gist");
+  }
   const headers = {
     "Accept": "application/vnd.github+json",
     "Authorization": `token ${state.githubToken}`,
@@ -286,7 +290,13 @@ async function pullSync() {
     const file = data.files && data.files["kitty-vault.json"];
     if (!file) throw new Error("Gist 中找不到 kitty-vault.json");
     const raw = file.content || await (await fetch(file.raw_url, { cache: "no-store" })).text();
-    const remote = JSON.parse(raw);
+    let remote;
+    try {
+      remote = JSON.parse(raw);
+    } catch (parseErr) {
+      const sizeMB = (raw.length / 1024 / 1024).toFixed(2);
+      throw new Error(`云端数据损坏或超过 Gist 1MB 限制（当前约 ${sizeMB} MB）。请删除大附件记录后重新同步。`);
+    }
     if (!remote || (!remote.sections && !remote.records)) { toast("云端暂无数据"); return; }
     mergeRemote(remote);
     await persistToIDB();
