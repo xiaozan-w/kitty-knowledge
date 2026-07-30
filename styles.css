@@ -39,8 +39,8 @@ body::before {
   content: "";
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background: url('assets/bg.jpg') center/cover no-repeat;
-  opacity: 0.10;
-  filter: blur(8px);
+  opacity: 0.16;
+  filter: blur(6px);
   z-index: 0; pointer-events: none;
 }
 
@@ -82,16 +82,18 @@ body::before {
   border-bottom: 1px solid var(--border);
 }
 
-/* 🎀 Logo 带蝴蝶结装饰 */
+/* 🎀 Logo 带 Hello Kitty 图标 */
 .logo {
   font-size: 19px; font-weight: 800; color: var(--primary-deep);
   letter-spacing: 1px;
   display: flex; align-items: center; gap: 4px;
 }
 .logo::before {
-  content: "🐱";
-  font-size: 22px;
-  margin-right: 4px;
+  content: "";
+  display: inline-block;
+  width: 28px; height: 28px;
+  background: url('assets/logo.png') center/contain no-repeat;
+  flex-shrink: 0;
 }
 
 .section-list { flex: 1; overflow-y: auto; padding: 8px 12px 12px; }

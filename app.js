@@ -525,7 +525,7 @@ function renderHome() {
   content.innerHTML = `
     <div class="home-view">
       <div class="home-hero">
-        <div class="home-title">🌸 我的碎知识</div>
+        <div class="home-title">🌸 小琦的碎片库</div>
         <div class="home-sub">私人知识收纳 · 点一下进入对应模块</div>
       </div>
       <div class="home-grid">${tiles}</div>

@@ -1,6 +1,6 @@
 {
-  "name": "🎀 碎知识 Kitty · 个人知识收纳",
-  "short_name": "碎知识Kitty",
+  "name": "小琦的碎片库 · 个人知识收纳",
+  "short_name": "小琦的碎片库",
   "description": "私人知识收纳工具，支持 PDF/图片/文字管理、智能概括、跨领域关联",
   "start_url": "./",
   "scope": "./",
