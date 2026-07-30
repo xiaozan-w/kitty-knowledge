@@ -529,6 +529,12 @@ function renderHome() {
         <div class="home-sub">私人知识收纳 · 点一下进入对应模块</div>
       </div>
       <div class="home-grid">${tiles}</div>
+      <div class="home-wallpaper-frame">
+        <div class="hwp-inner">
+          <img src="assets/bg.jpg" alt="小琦的 Hello Kitty 星球" loading="lazy" />
+        </div>
+        <div class="hwp-caption">🎀 小琦的 Hello Kitty 星球</div>
+      </div>
     </div>`;
   $$(".home-tile", content).forEach((t) =>
     t.addEventListener("click", () => {

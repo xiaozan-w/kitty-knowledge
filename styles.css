@@ -34,13 +34,13 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* 背景装饰：Hello Kitty 星球壁纸，浅化 + 模糊化，低饱和治愈 */
+/* 背景：极淡粉色柔光晕，不抢内容 */
 body::before {
   content: "";
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: url('assets/bg.jpg') center/cover no-repeat;
-  opacity: 0.16;
-  filter: blur(6px);
+  background:
+    radial-gradient(ellipse at 15% 85%, rgba(185,142,142,0.08) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 15%, rgba(168,144,154,0.08) 0%, transparent 55%);
   z-index: 0; pointer-events: none;
 }
 
@@ -663,6 +663,45 @@ body::before {
 .ht-icon { font-size: 44px; }
 .ht-name { font-size: 18px; font-weight: 800; color: var(--text); }
 .ht-meta { font-size: 13px; color: var(--text-faint); }
+
+/* 首页底部 Hello Kitty 壁纸相框 */
+.home-wallpaper-frame {
+  margin-top: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.hwp-inner {
+  width: 100%;
+  max-width: 480px;
+  padding: 10px;
+  background: linear-gradient(145deg, #fff7f9, #fff0f4);
+  border: 3px dashed var(--primary-soft);
+  border-radius: 26px;
+  box-shadow: 0 10px 34px rgba(176, 122, 122, 0.12);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.hwp-inner:hover {
+  transform: translateY(-4px) rotate(0.5deg);
+  box-shadow: 0 14px 42px rgba(176, 122, 122, 0.18);
+}
+.hwp-inner img {
+  width: 100%;
+  height: auto;
+  border-radius: 18px;
+  display: block;
+  object-fit: cover;
+}
+.hwp-caption {
+  font-size: 14px;
+  color: var(--primary-deep);
+  font-weight: 700;
+  letter-spacing: 1px;
+  background: rgba(255,255,255,0.7);
+  padding: 6px 16px;
+  border-radius: 50px;
+}
 
 /* ===================== 抽屉遮罩（移动端） ===================== */
 .drawer-backdrop { display: none; }
