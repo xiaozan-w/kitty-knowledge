@@ -177,12 +177,12 @@ function openDB() {
 const store = (name, mode) => db.transaction(name, mode).objectStore(name);
 const put_ = (name, v) => new Promise((res, rej) => {
   const r = store(name, "readwrite").put(v);
-  r.onsuccess = () => { if (BACKEND) scheduleSync(); res(v); };
+  r.onsuccess = () => { scheduleSync(); res(v); };
   r.onerror = () => rej(r.error);
 });
 const del_ = (name, id) => new Promise((res, rej) => {
   const r = store(name, "readwrite").delete(id);
-  r.onsuccess = () => { if (BACKEND) scheduleSync(); res(); };
+  r.onsuccess = () => { scheduleSync(); res(); };
   r.onerror = () => rej(r.error);
 });
 const all_ = (name) => new Promise((res, rej) => {
@@ -1673,8 +1673,9 @@ function openSettings() {
     state.gistId = $("#s_gist", overlay).value.trim();
     savePrefs();
     if (!state.githubToken) { toast("请先填 GitHub Token"); return; }
+    // 先推送（首次会自动创建 Gist 并回填 gistId），再拉取合并
+    try { await doSync(); } catch (e) { console.error("sync push error", e); }
     await pullSync();
-    scheduleSync();
   };
 }
 
