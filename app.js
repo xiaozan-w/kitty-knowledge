@@ -104,12 +104,40 @@ async function extractImageText(blob) {
     return data.text || "";
   } finally { URL.revokeObjectURL(url); }
 }
+/* 联网 AI 解析：调用 Cloudflare Worker 代理（Key 存于 Worker 环境变量，不暴露前端）
+   返回 { summary, tags } 或 null（失败/未配置） */
+async function aiWorkerParse(text) {
+  if (!state.aiWorkerUrl) return null;
+  try {
+    const r = await fetch(state.aiWorkerUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text.slice(0, 12000) }),
+    });
+    if (!r.ok) throw new Error("Worker " + r.status);
+    const j = await r.json();
+    if (j.error) throw new Error(j.error);
+    const tags = Array.isArray(j.tags) ? j.tags : (typeof j.tags === "string" ? j.tags.split(/[,，\s]+/).filter(Boolean) : []);
+    return { summary: (j.summary || "").trim(), tags };
+  } catch (e) {
+    console.warn("联网 AI 调用失败，回退本地：", e);
+    return null;
+  }
+}
+
 async function analyzeBlob(blob, fileType) {
   let text = "", pageCount = null;
   if (fileType === "pdf") { const r = await extractPdfText(blob); text = r.text; pageCount = r.pageCount; }
   else if (fileType === "text") text = await blob.text();
   else if (fileType === "image") text = await extractImageText(blob);
-  // 尝试豆包 AI 概括（有 API Key 且后端可用时优先）
+  // 优先：联网 AI（Cloudflare Worker 免费代理）
+  if (text.length > 50) {
+    const ai = await aiWorkerParse(text);
+    if (ai && ai.summary) {
+      return { summary: ai.summary, keywords: ai.tags.length ? ai.tags : topKeywords(ai.summary, 6), stats: { chars: text.length, sentences: 0, pageCount } };
+    }
+  }
+  // 次选：原后端豆包（仅 CloudStudio 后端场景）
   if (BACKEND && state.doubaoApiKey && text.length > 50) {
     try {
       const aiResult = await apiPost("/api/ai/doubao", {
@@ -238,6 +266,8 @@ const PRESETS = [
   searchQuery: "",
   doubaoApiKey: "",       // 豆包 API Key（从 config 获取）
   doubaoModel: "",        // 豆包模型 ID
+  timeFilter: "all",      // 时间筛选：all | 7d | 30d | year
+  aiWorkerUrl: "",         // 联网 AI 代理（Cloudflare Worker）地址
 };
 
 /* UI 偏好持久化（不存知识内容，仅界面状态） */
@@ -251,6 +281,7 @@ function loadPrefs() {
     if (typeof p.activeSectionId === "string") state.activeSectionId = p.activeSectionId;
     if (p.view === "home" || p.view === "section" || p.view === "trash") state.view = p.view;
     if (p.gdGroupCollapsed) state.gdGroupCollapsed = p.gdGroupCollapsed;
+    if (typeof p.aiWorkerUrl === "string") state.aiWorkerUrl = p.aiWorkerUrl;
   } catch (_) {}
 }
 function savePrefs() {
@@ -262,6 +293,7 @@ function savePrefs() {
     gdGroupCollapsed: state.gdGroupCollapsed,
     activeSectionId: state.activeSectionId,
     view: state.view,
+    aiWorkerUrl: state.aiWorkerUrl,
   }));
 }
 
@@ -343,6 +375,18 @@ const recordById = (id) => state.records.find((r) => r.id === id);
 const sortRecords = (recs) =>
   recs.slice().sort((a, b) => ((b.starred ? 1 : 0) - (a.starred ? 1 : 0)) || ((b.updatedAt || 0) - (a.updatedAt || 0)));
 
+/* 二期需求：按创建时间筛选（记录已自动保存 createdAt） */
+function applyTimeFilter(recs) {
+  if (state.timeFilter === "all") return recs;
+  const now = Date.now(), day = 86400000;
+  let start;
+  if (state.timeFilter === "7d") start = now - 7 * day;
+  else if (state.timeFilter === "30d") start = now - 30 * day;
+  else if (state.timeFilter === "year") start = new Date(new Date().getFullYear(), 0, 1).getTime();
+  else return recs;
+  return recs.filter((r) => (r.createdAt || 0) >= start);
+}
+
 /* ============================================================
    侧边栏
    ============================================================ */
@@ -368,12 +412,15 @@ function renderSidebar() {
     item.innerHTML = `
       <span class="sec-icon">${esc(s.icon || "📁")}</span>
       <span class="sec-name">${esc(s.name)}</span>
+      <button class="sec-del" data-delsec="${s.id}" title="删除板块">✕</button>
       <span class="sec-count">${count}</span>`;
     item.onclick = () => {
       state.activeSectionId = s.id; state.view = "section"; savePrefs();
       if (window.innerWidth <= 820) { state.sidebarHidden = true; applySidebar(); }
       renderSidebar(); renderMain();
     };
+    const secDelBtn = item.querySelector(".sec-del");
+    if (secDelBtn) secDelBtn.onclick = (e) => { e.stopPropagation(); deleteSection(s.id); };
     bindSectionDnD(item, s.id);
     list.appendChild(item);
   }
@@ -503,7 +550,7 @@ function renderMain() {
   const sec = sectionById(state.activeSectionId);
   const content = $("#content");
   if (!sec) { content.innerHTML = `<div class="empty-hint"><span class="eh-emoji">🌸</span>还没有板块，点左侧「＋ 新增一级板块」开始吧</div>`; return; }
-  const allRecs = recordsOfSection(sec.id);
+  const allRecs = applyTimeFilter(recordsOfSection(sec.id));
   const mods = modulesOf(sec.id);
 
   let html = `
@@ -514,6 +561,13 @@ function renderMain() {
         <div class="ch-sub">共 ${mods.length} 个子模块 · ${allRecs.length} 条知识记录</div>
       </div>
       <button class="ch-export" data-exportsec="${sec.id}" title="导出本板块（摘要+文件）">⬇ 导出本板块</button>
+      <button class="ch-delsec" data-delsec="${sec.id}" title="删除板块（含全部内容）">🗑 删板块</button>
+      <select class="ch-timefilter" id="timeFilter" title="按时间筛选资料">
+        <option value="all">全部时间</option>
+        <option value="7d">近 7 天</option>
+        <option value="30d">近 30 天</option>
+        <option value="year">今年</option>
+      </select>
     </div>`;
 
   /* 一级板块全局总目录 */
@@ -531,7 +585,7 @@ function renderMain() {
     html += `<div class="empty-hint"><span class="eh-emoji">📂</span>该板块还没有子模块，点右上角「＋ 子模块」新增</div>`;
   } else {
     for (const m of mods) {
-      const recs = recordsOfModule(m.id);
+      const recs = applyTimeFilter(recordsOfModule(m.id));
       html += moduleCardHTML(m, recs);
     }
   }
@@ -575,6 +629,14 @@ function renderMain() {
   $$("[data-exportsec]", content).forEach((b) =>
     b.addEventListener("click", () => exportSection(b.dataset.exportsec))
   );
+  $$("[data-delsec]", content).forEach((b) =>
+    b.addEventListener("click", () => deleteSection(b.dataset.delsec))
+  );
+  const tf = content.querySelector("#timeFilter");
+  if (tf) {
+    tf.value = state.timeFilter;
+    tf.onchange = () => { state.timeFilter = tf.value; renderMain(); };
+  }
   // 模块操作按钮
   $$("[data-addrec]", content).forEach((b) =>
     b.addEventListener("click", (e) => { e.stopPropagation(); openEditor(null, b.dataset.addrec); })
@@ -617,14 +679,14 @@ function globalDirBody(recs, secId) {
     const collapsed = state.gdGroupCollapsed?.[mid];
     html += `<div class="gd-group${collapsed ? " collapsed" : ""}">
       <div class="gd-group-head" data-gdg="${esc(mid)}"><span>📑 ${esc(g.name)}</span><span>${g.records.length} 条</span><span class="ph-caret">▾</span></div>
-      <div class="gd-group-body">${g.records.map((r) => `<div class="dir-row" data-rec="${r.id}"><span class="dr-dot"></span><span class="dr-title">${esc(r.title)}</span></div>`).join("")}</div>
+      <div class="gd-group-body">${g.records.slice(0, 10).map((r) => `<div class="dir-row" data-rec="${r.id}"><span class="dr-dot"></span><span class="dr-title">${esc(r.title)}</span></div>`).join("")}</div>
     </div>`;
   }
   if (unclassified.length) {
     const collapsed = state.gdGroupCollapsed?.["__unclassified"];
     html += `<div class="gd-group${collapsed ? " collapsed" : ""}">
       <div class="gd-group-head" data-gdg="__unclassified"><span>📁 未归类</span><span>${unclassified.length} 条</span><span class="ph-caret">▾</span></div>
-      <div class="gd-group-body">${unclassified.map((r) => `<div class="dir-row" data-rec="${r.id}"><span class="dr-dot"></span><span class="dr-title">${esc(r.title)}</span></div>`).join("")}</div>
+      <div class="gd-group-body">${unclassified.slice(0, 10).map((r) => `<div class="dir-row" data-rec="${r.id}"><span class="dr-dot"></span><span class="dr-title">${esc(r.title)}</span></div>`).join("")}</div>
     </div>`;
   }
   return html;
@@ -633,9 +695,10 @@ function globalDirBody(recs, secId) {
 function moduleCardHTML(m, recs) {
   const collapsed = !!state.moduleCollapsed[m.id];
   const localDir = recs.length
-    ? sortRecords(recs)
+    ? `<div class="dir-list">${sortRecords(recs)
+        .slice(0, 10)
         .map((r) => `<div class="dir-row" data-rec="${r.id}"><span class="dr-dot"></span><span class="dr-title">${esc(r.title)}</span></div>`)
-        .join("")
+        .join("")}</div>`
     : `<div class="empty-hint" style="padding:16px">该子模块还没有记录</div>`;
 
   const cards = recs.length
@@ -951,6 +1014,29 @@ async function deleteModule(mid) {
   toast("已删除子模块");
 }
 
+/* 一级大板块删除：二次确认防误删（PRD 十三-3） */
+async function deleteSection(sid) {
+  const s = sectionById(sid);
+  if (!s) return;
+  const mods = modulesOf(sid);
+  const recCount = recordsOfSection(sid).length;
+  if (!confirm(`删除板块「${s.name}」后，板块内所有知识记录（${recCount} 条）将一并移除，确认执行删除？`)) return;
+  for (const m of mods) {
+    const recs = recordsOfModule(m.id);
+    for (const r of recs) { await del_("records", r.id); state.records = state.records.filter((x) => x.id !== r.id); }
+    await del_("modules", m.id);
+    state.modules = state.modules.filter((x) => x.id !== m.id);
+  }
+  await del_("sections", sid);
+  state.sections = state.sections.filter((x) => x.id !== sid);
+  if (state.activeSectionId === sid) {
+    state.activeSectionId = state.sections[0]?.id || null;
+    state.view = state.activeSectionId ? "section" : "home";
+  }
+  savePrefs(); applySidebar(); renderSidebar(); renderMain();
+  toast("已删除板块「" + s.name + "」");
+}
+
 /* 记录编辑器（新增/编辑共用） */
 async function openEditor(recId, presetModuleId) {
   const existing = recId ? recordById(recId) : null;
@@ -1004,7 +1090,7 @@ async function openEditor(recId, presetModuleId) {
             <button type="button" id="f_analyze" class="mini-btn">✨ 智能概括</button>
           </div>
           <textarea id="f_summary" placeholder="记录这条知识的核心要点、笔记或心得…（也可点上方按钮自动概括）"></textarea>
-          <div class="hint">上传文件后点「✨ 智能概括」可自动提取文本、生成内容概括与关键词（本地处理，不上传）</div>
+          <div class="hint">上传文件后点「✨ 智能概括」可自动提取文本、调用联网 AI 生成摘要与标签；未配置 AI 代理时自动使用本地提取。</div>
         </div>
         ${fileType === "text" || !existing ? "" : `<div class="field"><div class="hint">已存在原文件，重新上传可替换；留空则保留原文件。</div></div>`}
       </div>
@@ -1428,6 +1514,11 @@ function openSettings() {
           <label>模型 ID（选填）</label>
           <input type="text" id="s_model" value="${esc(state.doubaoModel)}" placeholder="如 doubao-pro-32k 或你的接入点 ID" />
         </div>
+        <div class="field">
+          <label>联网 AI 代理地址（Cloudflare Worker URL）</label>
+          <input type="text" id="s_worker" value="${esc(state.aiWorkerUrl)}" placeholder="https://xxxx.xxx.workers.dev/api/ai" />
+          <div class="hint">部署一个免费的 Cloudflare Worker 代理（见 DEPLOY_AI.md），把 AI Key 藏在 Worker 里，此处填 Worker 地址即可实现真·联网 AI 解析。留空则使用本地文本提取。</div>
+        </div>
       </div>
       <div class="form-footer">
         <button class="btn-cancel">取消</button>
@@ -1441,6 +1532,7 @@ function openSettings() {
   $(".btn-save", overlay).onclick = async () => {
     state.doubaoApiKey = $("#s_apikey", overlay).value.trim();
     state.doubaoModel = $("#s_model", overlay).value.trim();
+    state.aiWorkerUrl = $("#s_worker", overlay).value.trim();
     if (BACKEND) {
       try { await apiPost("/api/config", { doubao_api_key: state.doubaoApiKey, doubao_model: state.doubaoModel }); } catch (_) {}
     }

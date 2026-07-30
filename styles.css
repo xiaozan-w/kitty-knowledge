@@ -1,25 +1,25 @@
-/* ===================== 🎀 碎知识 Kitty · Hello Kitty 粉紫主题 ===================== */
+/* ===================== 碎知识工作台 · 莫兰迪粉 + 浅米色 文艺治愈主题 ===================== */
 :root {
-  --bg: #fef6f9;
-  --bg-soft: #fce8f0;
-  --sidebar-bg: linear-gradient(180deg, #fdd5e8 0%, #fce4f2 40%, #f9e0f5 100%);
-  --card: #ffffff;
-  --primary: #e8769f;
-  --primary-deep: #c9547e;
-  --primary-soft: #fdd5e8;
-  --accent: #d4a0d9;
-  --accent-soft: #f3e5f8;
-  --kitty-pink: #fdd5e8;
-  --kitty-purple: #d4a0d9;
-  --kitty-red: #e04b74;
-  --kitty-yellow: #ffd866;
-  --text: #5c3d5e;
-  --text-soft: #8a6b8c;
-  --text-faint: #b899ba;
-  --border: #f0d4e3;
-  --border-soft: #f8ecf2;
-  --shadow: 0 8px 28px rgba(224, 75, 116, 0.18);
-  --shadow-soft: 0 4px 16px rgba(224, 75, 116, 0.10);
+  --bg: #f5f0ea;
+  --bg-soft: #efe7df;
+  --sidebar-bg: linear-gradient(180deg, #e7dcd3 0%, #efe6de 45%, #f3ece4 100%);
+  --card: #fffdfa;
+  --primary: #b98e8e;
+  --primary-deep: #9c7373;
+  --primary-soft: #e3d2d2;
+  --accent: #a8909a;
+  --accent-soft: #ece2e7;
+  --kitty-pink: #e3d2d2;
+  --kitty-purple: #a8909a;
+  --kitty-red: #b07a7a;
+  --kitty-yellow: #d8c18a;
+  --text: #574e4e;
+  --text-soft: #8a7d7d;
+  --text-faint: #b3a6a6;
+  --border: #e0d4ca;
+  --border-soft: #efe8e0;
+  --shadow: 0 8px 28px rgba(150,120,120,0.16);
+  --shadow-soft: 0 4px 16px rgba(150,120,120,0.10);
   --radius: 18px;
   --radius-sm: 12px;
   --capsule: 50px;
@@ -35,14 +35,13 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* 🎀 背景装饰：Hello Kitty 式条纹 + 蝴蝶结水印 */
+/* 背景装饰：莫兰迪柔光晕，文艺治愈低饱和 */
 body::before {
   content: "";
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background:
-    repeating-linear-gradient(0deg, transparent, transparent 40px, rgba(253,213,232,0.06) 40px, rgba(253,213,232,0.06) 41px),
-    radial-gradient(ellipse at 20% 80%, rgba(212,160,217,0.08) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(253,213,232,0.12) 0%, transparent 50%);
+    radial-gradient(ellipse at 15% 85%, rgba(185,142,142,0.10) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 15%, rgba(168,144,154,0.10) 0%, transparent 55%);
   z-index: 0; pointer-events: none;
 }
 
@@ -111,7 +110,7 @@ body::before {
   background: linear-gradient(135deg, var(--primary-soft), var(--accent-soft));
   font-weight: 700;
   box-shadow: var(--shadow-soft);
-  border: 1px solid rgba(224,75,116,0.15);
+  border: 1px solid rgba(176,122,122,0.18);
 }
 .section-item .sec-icon { font-size: 18px; width: 24px; text-align: center; }
 .section-item .sec-name { flex: 1; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -326,6 +325,31 @@ body::before {
 }
 .dir-row:hover { background: var(--bg-soft); transform: translateX(3px); }
 .dir-row .dr-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); flex-shrink: 0; }
+
+/* PRD 十三-3：一级板块删除按钮（侧边栏 + 板块头部） */
+.sec-del {
+  border: none; background: transparent; color: var(--text-faint); cursor: pointer;
+  font-size: 13px; width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; margin-left: 4px;
+  transition: background .15s, color .15s; flex-shrink: 0;
+}
+.sec-del:hover { background: var(--primary-soft); color: var(--kitty-red); }
+.ch-delsec {
+  margin-left: 8px; padding: 6px 12px; border-radius: var(--capsule);
+  border: 1px solid var(--kitty-red); background: transparent; color: var(--kitty-red);
+  cursor: pointer; font-size: 13px; transition: background .15s, color .15s;
+}
+.ch-delsec:hover { background: var(--kitty-red); color: #fff; }
+.ch-timefilter {
+  margin-left: 8px; padding: 6px 10px; border-radius: var(--capsule);
+  border: 1px solid var(--border); background: var(--card); color: var(--text-soft);
+  font-size: 13px; cursor: pointer; outline: none;
+}
+.ch-timefilter:focus { border-color: var(--primary); }
+
+/* PRD 十三-2：目录容器固定可视区域，最多 10 条，超出滚动 */
+.dir-list { max-height: 230px; overflow-y: auto; margin-bottom: 8px; }
+.gd-group-body { max-height: 230px; overflow-y: auto; }
 .dir-row .dr-title { flex: 1; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dir-row .dr-mod { font-size: 11px; color: var(--primary-deep); background: var(--primary-soft); padding: 3px 10px; border-radius: var(--capsule); font-weight: 600; }
 
@@ -465,7 +489,7 @@ body::before {
 
 .preview-pane {
   flex: 1.6; overflow-y: auto; padding: 20px;
-  background: linear-gradient(135deg, #f9eef5, #f3e5f8);
+  background: linear-gradient(135deg, var(--primary-soft), var(--accent-soft));
   display: flex; flex-direction: column; align-items: center; gap: 14px;
 }
 .preview-pane canvas { max-width: 100%; border-radius: 12px; box-shadow: var(--shadow-soft); background: #fff; }
@@ -522,7 +546,7 @@ body::before {
 }
 .btn-edit { background: var(--primary-soft); color: var(--primary-deep); }
 .btn-edit:hover { background: var(--primary); color: #fff; }
-.btn-del { background: var(--bg-soft); color: #c75b86; }
+.btn-del { background: var(--bg-soft); color: var(--kitty-red); }
 .btn-del:hover { background: var(--accent-soft); }
 .btn-star { background: var(--primary-soft); color: var(--primary-deep); }
 .btn-star:hover { background: var(--accent-soft); }
@@ -547,7 +571,7 @@ body::before {
 .field input:focus, .field textarea:focus, .field select:focus {
   border-color: var(--primary); box-shadow: 0 0 0 4px var(--primary-soft);
 }
-.field textarea { resize: vertical; min-height: 90px; line-height: 1.6; }
+.field textarea { resize: none; height: 232px; max-height: 232px; overflow-y: auto; line-height: 1.6; padding: 12px 14px; font-size: 14.5px; }
 .field .hint { font-size: 11px; color: var(--text-faint); margin-top: 6px; }
 .type-tabs { display: flex; gap: 10px; }
 .type-tab {
