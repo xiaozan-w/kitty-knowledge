@@ -333,13 +333,13 @@ body::before {
   display: flex; align-items: center; justify-content: center; margin-left: 4px;
   transition: background .15s, color .15s; flex-shrink: 0;
 }
-.sec-del:hover { background: var(--primary-soft); color: var(--kitty-red); }
+.sec-del:hover { background: var(--primary-soft); color: var(--primary-deep); }
 .ch-delsec {
   margin-left: 8px; padding: 6px 12px; border-radius: var(--capsule);
-  border: 1px solid var(--kitty-red); background: transparent; color: var(--kitty-red);
+  border: 1px solid var(--primary-deep); background: transparent; color: var(--primary-deep);
   cursor: pointer; font-size: 13px; transition: background .15s, color .15s;
 }
-.ch-delsec:hover { background: var(--kitty-red); color: #fff; }
+.ch-delsec:hover { background: var(--primary-deep); color: #fff; }
 .ch-timefilter {
   margin-left: 8px; padding: 6px 10px; border-radius: var(--capsule);
   border: 1px solid var(--border); background: var(--card); color: var(--text-soft);
@@ -635,7 +635,7 @@ body::before {
 /* ===================== 🎀 首页大模块网格 ===================== */
 .home-view { padding-top: 4px; }
 .home-hero { margin-bottom: 6px; }
-.home-title { font-size: 28px; font-weight: 900; color: var(--kitty-red); letter-spacing: 1px; }
+.home-title { font-size: 28px; font-weight: 900; color: var(--primary-deep); letter-spacing: 1px; }
 .home-sub { font-size: 14px; color: var(--text-faint); margin-top: 8px; }
 .home-grid {
   display: grid;

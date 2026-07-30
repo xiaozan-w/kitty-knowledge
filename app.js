@@ -335,6 +335,11 @@ async function init() {
   if (!state.activeSectionId || !state.sections.find((s) => s.id === state.activeSectionId)) {
     state.activeSectionId = state.sections[0]?.id || null;
   }
+  // PC 端始终展开侧边栏（防止旧版 localStorage 状态导致侧边栏被隐藏）
+  if (window.innerWidth > 820) {
+    state.sidebarHidden = false;
+    savePrefs();
+  }
   applySidebar();
   bindGlobalEvents();
   renderSidebar();
