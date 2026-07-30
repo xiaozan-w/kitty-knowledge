@@ -9,22 +9,26 @@
 ## 一、准备
 
 1. 注册免费 Cloudflare 账号：https://dash.cloudflare.com/sign-up
-2. 本机安装 Node.js（已有，无需额外操作）
-3. 打开本机 **PowerShell** 或 **终端**，安装 wrangler：
-   ```bash
-   npm install -g wrangler
+2. 打开本机 **PowerShell**，把 WorkBuddy 自带的 Node 临时加到环境变量（本机没装 Node 也能用）：
+   ```powershell
+   $env:Path = "C:\Users\小赞\.workbuddy\binaries\node\versions\22.22.2;" + $env:Path
    ```
-4. 登录（浏览器授权）：
-   ```bash
-   wrangler login
+3. 进入同步 Worker 目录：
+   ```powershell
+   cd "D:\WorkBuddy\2026-07-30-13-22-07\kitty-knowledge\sync-worker"
+   ```
+4. 安装依赖并登录（浏览器授权）：
+   ```powershell
+   npm install
+   npx wrangler login
    ```
 
 ---
 
 ## 二、创建 KV 存储
 
-```bash
-wrangler kv namespace create VAULT
+```powershell
+npx wrangler kv namespace create VAULT
 ```
 
 终端会返回一段 JSON，形如：
@@ -49,9 +53,9 @@ id = "REPLACE_WITH_YOUR_KV_ID"
 
 ## 四、部署
 
-```bash
-cd 你本地的\kitty-knowledge\sync-worker
-wrangler deploy
+```powershell
+cd "D:\WorkBuddy\2026-07-30-13-22-07\kitty-knowledge\sync-worker"
+npx wrangler deploy
 ```
 
 成功后终端会打印你的 Worker 地址，类似：
