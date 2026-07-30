@@ -1,13 +1,13 @@
 {
-  "name": "碎知识 Kitty · 个人知识收纳",
+  "name": "🎀 碎知识 Kitty · 个人知识收纳",
   "short_name": "碎知识Kitty",
-  "description": "私人知识收纳工具，随时随地记录和管理你的碎片知识",
+  "description": "私人知识收纳工具，支持 PDF/图片/文字管理、智能概括、跨领域关联",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#FFF0F5",
-  "theme_color": "#FF69B4",
+  "orientation": "any",
+  "background_color": "#fef6f9",
+  "theme_color": "#e8769f",
   "icons": [
     {
       "src": "./icons/icon-192.png",

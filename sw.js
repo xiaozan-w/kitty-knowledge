@@ -1,11 +1,12 @@
-// Service Worker for 碎知识 Kitty
-const CACHE_VERSION = 'kitty-v1.0.0';
-const CACHE_NAME = `${CACHE_VERSION}`;
+// Service Worker for 🎀 碎知识 Kitty · 个人知识收纳
+const CACHE_VERSION = 'kitty-v2.0.0';
+const CACHE_NAME = CACHE_VERSION;
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
-  './script.js',
+  './app.js',
+  './index.standalone.html',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png'
@@ -41,33 +42,43 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: cache-first, fallback to network
+// Fetch: cache-first for same-origin, network-first for navigation
 self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests
   if (event.request.method !== 'GET') return;
 
-  // Skip cross-origin requests
   const url = new URL(event.request.url);
-  if (url.origin !== location.origin) return;
 
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        // Clone and cache successful responses
-        if (response && response.status === 200 && response.type === 'basic') {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-          });
-        }
+  // Skip API calls (won't exist on GitHub Pages, but handle gracefully)
+  if (url.pathname.startsWith('/api/')) return;
+
+  // For navigation requests: network-first, fallback to cache (for offline)
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         return response;
-      }).catch(() => {
-        // Offline fallback
-        if (event.request.mode === 'navigate') {
-          return caches.match('./index.html');
-        }
-      });
-    })
-  );
+      }).catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
+
+  // For same-origin static assets: cache-first
+  if (url.origin === location.origin) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        return fetch(event.request).then((response) => {
+          if (response && response.status === 200 && response.type === 'basic') {
+            const responseClone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseClone);
+            });
+          }
+          return response;
+        });
+      })
+    );
+  }
+  // Cross-origin requests (e.g. CDN for pdf.js) pass through normally
 });
