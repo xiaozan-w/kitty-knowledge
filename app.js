@@ -1675,6 +1675,8 @@ function openSettings() {
     if (!state.githubToken) { toast("请先填 GitHub Token"); return; }
     // 先推送（首次会自动创建 Gist 并回填 gistId），再拉取合并
     try { await doSync(); } catch (e) { console.error("sync push error", e); }
+    // 把自动创建的 Gist ID 写回输入框，方便查看并复制到其他设备
+    if (state.gistId) $("#s_gist", overlay).value = state.gistId;
     await pullSync();
   };
 }
