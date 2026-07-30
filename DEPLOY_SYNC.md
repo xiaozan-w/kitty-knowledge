@@ -9,25 +9,26 @@
 ## 一、准备
 
 1. 注册免费 Cloudflare 账号：https://dash.cloudflare.com/sign-up
-2. 打开本机 **PowerShell**，把 WorkBuddy 自带的 Node 临时加到环境变量（本机没装 Node 也能用）：
-   ```powershell
-   $env:Path = "C:\Users\小赞\.workbuddy\binaries\node\versions\22.22.2;" + $env:Path
-   ```
-3. 进入同步 Worker 目录：
-   ```powershell
-   cd "D:\WorkBuddy\2026-07-30-13-22-07\kitty-knowledge\sync-worker"
+2. 打开本机 **命令提示符（cmd）**（推荐，避免 PowerShell 执行策略拦截）：
+   - 按 `Win + R`，输入 `cmd`，回车
+3. 把 WorkBuddy 自带的 Node 临时加到环境变量，并进入同步 Worker 目录：
+   ```cmd
+   set PATH=C:\Users\小赞\.workbuddy\binaries\node\versions\22.22.2;%PATH%
+   cd /d "D:\WorkBuddy\2026-07-30-13-22-07\kitty-knowledge\sync-worker"
    ```
 4. 安装依赖并登录（浏览器授权）：
-   ```powershell
+   ```cmd
    npm install
    npx wrangler login
    ```
+
+> **如果你坚持用 PowerShell**：请先执行 `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process`，否则 `npm`/`npx` 的 `.ps1` 脚本会被系统禁止运行。
 
 ---
 
 ## 二、创建 KV 存储
 
-```powershell
+```cmd
 npx wrangler kv namespace create VAULT
 ```
 
@@ -53,8 +54,8 @@ id = "REPLACE_WITH_YOUR_KV_ID"
 
 ## 四、部署
 
-```powershell
-cd "D:\WorkBuddy\2026-07-30-13-22-07\kitty-knowledge\sync-worker"
+```cmd
+cd /d "D:\WorkBuddy\2026-07-30-13-22-07\kitty-knowledge\sync-worker"
 npx wrangler deploy
 ```
 
