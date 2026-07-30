@@ -59,17 +59,16 @@ kitty-knowledge/
 
 ### 第 2 步：推送代码到 GitHub
 
-**请把下面的 `<你的用户名>` 替换成你的 GitHub 用户名**，然后在 PowerShell 或 Git Bash 中执行：
-
 ```bash
 cd "D:\WorkBuddy\2026-07-30-13-22-07\kitty-knowledge"
 
-git remote add origin https://github.com/<你的用户名>/kitty-knowledge.git
+git remote add origin https://github.com/xiaozan-w/kitty-knowledge.git
 
 git push -u origin main
 ```
 
-> 💡 第一次推送会要求你输入 GitHub 用户名和密码（或 Personal Access Token）。
+> 💡 Git remote 已经配置好了，直接运行 `git push -u origin main` 即可。
+> 第一次推送会要求你输入 GitHub 用户名和密码（或 Personal Access Token）。
 
 **如果要求 Personal Access Token：**
 1. 打开 https://github.com/settings/tokens/new
@@ -89,7 +88,7 @@ git push -u origin main
 
 ### ✅ 完成！
 
-你的永久链接：**https://\<你的用户名\>.github.io/kitty-knowledge/**
+你的永久链接：**https://xiaozan-w.github.io/kitty-knowledge/**
 
 打开浏览器访问，手机 Safari/Chrome 还能「添加到主屏幕」当成 App 用 🎀
 
