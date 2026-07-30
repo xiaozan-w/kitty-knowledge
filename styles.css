@@ -34,13 +34,13 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* 背景装饰：莫兰迪柔光晕，文艺治愈低饱和 */
+/* 背景装饰：Hello Kitty 星球壁纸，浅化 + 模糊化，低饱和治愈 */
 body::before {
   content: "";
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background:
-    radial-gradient(ellipse at 15% 85%, rgba(185,142,142,0.10) 0%, transparent 55%),
-    radial-gradient(ellipse at 85% 15%, rgba(168,144,154,0.10) 0%, transparent 55%);
+  background: url('assets/bg.jpg') center/cover no-repeat;
+  opacity: 0.10;
+  filter: blur(8px);
   z-index: 0; pointer-events: none;
 }
 
@@ -89,7 +89,7 @@ body::before {
   display: flex; align-items: center; gap: 4px;
 }
 .logo::before {
-  content: "🎀";
+  content: "🐱";
   font-size: 22px;
   margin-right: 4px;
 }
