@@ -664,43 +664,62 @@ body::before {
 .ht-name { font-size: 18px; font-weight: 800; color: var(--text); }
 .ht-meta { font-size: 13px; color: var(--text-faint); }
 
-/* 首页底部 Hello Kitty 壁纸相框 */
-.home-wallpaper-frame {
-  margin-top: 34px;
+/* 启动页：Hello Kitty 星球入口 */
+.splash-view {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.splash-frame {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-}
-.hwp-inner {
+  gap: 22px;
+  max-width: 520px;
   width: 100%;
-  max-width: 480px;
-  padding: 10px;
+}
+.splash-img-wrap {
+  width: 100%;
+  padding: 12px;
   background: linear-gradient(145deg, #fff7f9, #fff0f4);
   border: 3px dashed var(--primary-soft);
-  border-radius: 26px;
-  box-shadow: 0 10px 34px rgba(176, 122, 122, 0.12);
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  border-radius: 28px;
+  box-shadow: 0 12px 40px rgba(176, 122, 122, 0.14);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
-.hwp-inner:hover {
-  transform: translateY(-4px) rotate(0.5deg);
-  box-shadow: 0 14px 42px rgba(176, 122, 122, 0.18);
+.splash-img-wrap:hover {
+  transform: translateY(-5px) rotate(0.5deg);
+  box-shadow: 0 16px 50px rgba(176, 122, 122, 0.2);
 }
-.hwp-inner img {
+.splash-img-wrap img {
   width: 100%;
   height: auto;
-  border-radius: 18px;
+  border-radius: 20px;
   display: block;
   object-fit: cover;
 }
-.hwp-caption {
-  font-size: 14px;
+.splash-enter {
+  font-size: 18px;
+  font-weight: 800;
   color: var(--primary-deep);
-  font-weight: 700;
-  letter-spacing: 1px;
-  background: rgba(255,255,255,0.7);
-  padding: 6px 16px;
+  letter-spacing: 1.5px;
+  background: rgba(255,255,255,0.85);
+  border: 2px solid var(--primary-soft);
+  padding: 12px 28px;
   border-radius: 50px;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(176, 122, 122, 0.12);
+  transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+.splash-enter:hover {
+  transform: translateY(-3px) scale(1.03);
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(176, 122, 122, 0.2);
+}
+.splash-enter:active {
+  transform: translateY(0) scale(0.98);
 }
 
 /* ===================== 抽屉遮罩（移动端） ===================== */

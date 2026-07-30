@@ -1,11 +1,11 @@
 // Service Worker for 🎀 碎知识 Kitty · 个人知识收纳
-const CACHE_VERSION = 'kitty-v2.6.0';
+const CACHE_VERSION = 'kitty-v2.7.0';
 const CACHE_NAME = CACHE_VERSION;
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=9',
-  './app.js?v=9',
+  './styles.css?v=10',
+  './app.js?v=10',
   './index.standalone.html',
   './assets/bg.jpg',
   './assets/logo.png',

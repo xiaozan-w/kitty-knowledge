@@ -257,7 +257,7 @@ const PRESETS = [
   const state = {
   sections: [], modules: [], records: [],
   activeSectionId: null,
-  view: "home",          // "home" | "section" | "trash"
+  view: "splash",        // "splash" | "home" | "section" | "trash"
   sidebarWidth: 260,
   sidebarHidden: false,
   moduleCollapsed: {},
@@ -279,7 +279,7 @@ function loadPrefs() {
     if (p.moduleCollapsed) state.moduleCollapsed = p.moduleCollapsed;
     if (typeof p.globalCollapsed === "boolean") state.globalCollapsed = p.globalCollapsed;
     if (typeof p.activeSectionId === "string") state.activeSectionId = p.activeSectionId;
-    if (p.view === "home" || p.view === "section" || p.view === "trash") state.view = p.view;
+    if (p.view === "splash" || p.view === "home" || p.view === "section" || p.view === "trash") state.view = p.view;
     if (p.gdGroupCollapsed) state.gdGroupCollapsed = p.gdGroupCollapsed;
     if (typeof p.aiWorkerUrl === "string") state.aiWorkerUrl = p.aiWorkerUrl;
   } catch (_) {}
@@ -510,6 +510,24 @@ function reorderModules(fromId, toId, after) {
 /* ============================================================
    主内容区
    ============================================================ */
+function renderSplash() {
+  const content = $("#content");
+  content.innerHTML = `
+    <div class="splash-view">
+      <div class="splash-frame">
+        <div class="splash-img-wrap">
+          <img src="assets/bg.jpg" alt="小琦的 Hello Kitty 星球" />
+        </div>
+        <button class="splash-enter">🎀 小琦的 Hello Kitty 星球</button>
+      </div>
+    </div>`;
+  $(".splash-enter", content).onclick = () => {
+    state.view = "home";
+    savePrefs();
+    renderMain();
+  };
+}
+
 function renderHome() {
   const content = $("#content");
   const secs = [...state.sections].sort((a, b) => a.order - b.order);
@@ -529,12 +547,6 @@ function renderHome() {
         <div class="home-sub">私人知识收纳 · 点一下进入对应模块</div>
       </div>
       <div class="home-grid">${tiles}</div>
-      <div class="home-wallpaper-frame">
-        <div class="hwp-inner">
-          <img src="assets/bg.jpg" alt="小琦的 Hello Kitty 星球" loading="lazy" />
-        </div>
-        <div class="hwp-caption">🎀 小琦的 Hello Kitty 星球</div>
-      </div>
     </div>`;
   $$(".home-tile", content).forEach((t) =>
     t.addEventListener("click", () => {
@@ -548,6 +560,7 @@ function renderHome() {
 }
 
 function renderMain() {
+  if (state.view === "splash") { renderSplash(); return; }
   if (state.view === "home") { renderHome(); return; }
   if (state.view === "trash") { renderTrash(); return; }
   const sec = sectionById(state.activeSectionId);
