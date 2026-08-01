@@ -1,11 +1,11 @@
 // Service Worker for 🎀 小琦的碎片库 · 个人知识收纳
-const CACHE_VERSION = 'kitty-v3.0.9';
+const CACHE_VERSION = 'kitty-v3.0.10';
 const CACHE_NAME = CACHE_VERSION;
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=24',
-  './app.js?v=26',
+  './styles.css?v=27',
+  './app.js?v=27',
   './index.standalone.html',
   './assets/bg.jpg',
   './assets/logo.png',

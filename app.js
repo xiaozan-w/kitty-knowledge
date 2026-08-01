@@ -383,40 +383,51 @@ function savePrefs() {
 
 /* ---------- 初始化 ---------- */
 async function init() {
-  await openDB();
-  loadPrefs();
+  // 1. 打开本地数据库（失败则后续只能跑在内存模式，尽量不影响界面）
+  try { await openDB(); } catch (e) { console.warn("IndexedDB 打开失败：", e); }
+  try { loadPrefs(); } catch (e) { console.warn("读取偏好失败：", e); }
 
-  // 初始化 Cloudflare 同步（若已在设置里填好 Worker URL + 密钥）
-  await initCloudflare();
+  // 2. 初始化 Cloudflare 同步（仅做状态判断，不联网，不阻塞）
+  try { initCloudflare(); } catch (e) { console.warn("Cloudflare 初始化失败：", e); }
 
-  // 先以本地 IndexedDB 兜底加载（离线 / file:// 也能用）
-  state.sections = await all_("sections");
-  state.modules = await all_("modules");
-  state.records = await all_("records");
+  // 3. 先以本地 IndexedDB 兜底加载（离线 / file:// 也能用）
+  try {
+    state.sections = await all_("sections");
+    state.modules = await all_("modules");
+    state.records = await all_("records");
+  } catch (e) {
+    console.warn("读取本地数据失败：", e);
+    state.sections = []; state.modules = []; state.records = [];
+  }
 
-  // 已配置云端 -> 后台拉取（不阻塞首屏渲染；拉取成功后再刷新界面）
+  // 4. 已配置云端 -> 后台拉取（绝对不阻塞首屏渲染）
   if (CLOUDFLARE) {
     pullCloudflare()
       .then(() => { renderSidebar(); renderMain(); })
       .catch((e) => console.warn("云端拉取失败（不影响本地使用）：", e));
   }
 
+  // 5. 没有数据时注入预设板块
   if (state.sections.length === 0) {
-    await seedPresets();
-    state.sections = await all_("sections");
-    state.modules = await all_("modules");
+    try {
+      await seedPresets();
+      state.sections = await all_("sections");
+      state.modules = await all_("modules");
+    } catch (e) { console.warn("写入预设数据失败：", e); }
   }
   if (!state.activeSectionId || !state.sections.find((s) => s.id === state.activeSectionId)) {
     state.activeSectionId = state.sections[0]?.id || null;
   }
-  applySidebar();
-  bindGlobalEvents();
-  renderSidebar();
-  renderMain();
-  // 豆包 Key 已存于本地偏好，无需云端读取
-  // 7 天自动清理 + 定时
-  purgeExpired();
-  setInterval(purgeExpired, 3600000);
+
+  // 6. 渲染界面 + 绑定事件（即使某一步报错也要尽量继续）
+  try { applySidebar(); } catch (e) { console.warn("应用侧边栏状态失败：", e); }
+  try { bindGlobalEvents(); } catch (e) { console.warn("绑定全局事件失败：", e); }
+  try { renderSidebar(); } catch (e) { console.warn("渲染侧边栏失败：", e); }
+  try { renderMain(); } catch (e) { console.warn("渲染主内容失败：", e); }
+
+  // 7. 自动清理
+  try { purgeExpired(); } catch (e) { console.warn("清理过期记录失败：", e); }
+  setInterval(() => { try { purgeExpired(); } catch (_) {} }, 3600000);
 }
 
 async function seedPresets() {
@@ -462,6 +473,11 @@ function applyTimeFilter(recs) {
    侧边栏
    ============================================================ */
 function applySidebar() {
+  // 移动端（窄屏）默认强制收起侧边栏抽屉，避免从桌面端带过来的展开状态遮挡页面
+  if (window.innerWidth <= 820 && !state.sidebarHidden) {
+    state.sidebarHidden = true;
+    savePrefs();
+  }
   const sb = $("#sidebar");
   sb.style.width = state.sidebarWidth + "px";
   sb.classList.toggle("collapsed", state.sidebarHidden);
