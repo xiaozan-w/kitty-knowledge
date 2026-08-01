@@ -105,12 +105,66 @@ async function extractImageText(blob) {
   } finally { URL.revokeObjectURL(url); }
 }
 /* 本地 AI 解析：纯前端摘要 + 关键词，不上传任何内容 */
+async function summarizeWithDoubao(text) {
+  if (!state.doubaoApiKey) throw new Error("未配置豆包 API Key");
+  const trimmed = (text || "").slice(0, 8000);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20000);
+  let resp;
+  try {
+    resp = await fetch("https://ark.cn-beijing.volces.com/api/v3/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + state.doubaoApiKey,
+      },
+      body: JSON.stringify({
+        model: state.doubaoModel || "doubao-seed-1-6-250615",
+        temperature: 0.3,
+        max_tokens: 400,
+        messages: [
+          { role: "system", content: "你是专业的知识整理助手，善于提炼要点与生成标签。只输出要求的字段，不要多余解释。" },
+          { role: "user", content: "请总结下面这段内容，并给出 3-6 个关键词。\n用如下 JSON 格式返回（不要包含代码块标记）：\n{\"summary\":\"一段话摘要，不超过 120 字\",\"keywords\":[\"关键词1\",\"关键词2\"]}\n\n文本内容：\n" + trimmed },
+        ],
+      }),
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    throw new Error("网络/CORS 错误：" + (e.message || e));
+  }
+  clearTimeout(timer);
+  if (!resp.ok) throw new Error("豆包返回 " + resp.status);
+  const data = await resp.json();
+  const content = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
+  const jsonStr = content.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
+  let parsed;
+  try { parsed = JSON.parse(jsonStr); } catch (_) { parsed = { summary: content.trim(), keywords: [] }; }
+  return {
+    summary: (parsed.summary || content.trim()).slice(0, 300),
+    keywords: Array.isArray(parsed.keywords) ? parsed.keywords.slice(0, 8).map((k) => String(k).trim()).filter(Boolean) : [],
+  };
+}
+
 async function analyzeBlob(blob, fileType) {
   let text = "", pageCount = null;
   if (fileType === "pdf") { const r = await extractPdfText(blob); text = r.text; pageCount = r.pageCount; }
   else if (fileType === "text") text = await blob.text();
   else if (fileType === "image") text = await extractImageText(blob);
-  const sum = summarizeText(text);
+  let sum, source = "local";
+  if (state.doubaoApiKey && text.trim()) {
+    try {
+      const ai = await summarizeWithDoubao(text);
+      sum = { summary: ai.summary, keywords: ai.keywords, stats: {} };
+      source = "doubao";
+    } catch (e) {
+      console.warn("豆包概括失败，回退本地：", e);
+      sum = summarizeText(text);
+    }
+  } else {
+    sum = summarizeText(text);
+  }
+  sum.source = source;
   sum.stats.pageCount = pageCount;
   return sum;
 }
@@ -183,6 +237,8 @@ const PRESETS = [
   gdGroupCollapsed: {},   // 全局目录分组折叠态
   searchQuery: "",
   timeFilter: "all",      // 时间筛选：all | 7d | 30d | year
+  doubaoApiKey: "",       // 用户自填的火山方舟 API Key（仅存本机 localStorage）
+  doubaoModel: "doubao-seed-1-6-250615",  // 豆包模型 ID
 };
 
 /* UI 偏好持久化（不存知识内容，仅界面状态） */
@@ -196,6 +252,8 @@ function loadPrefs() {
     if (typeof p.activeSectionId === "string") state.activeSectionId = p.activeSectionId;
     if (p.view === "splash" || p.view === "home" || p.view === "section" || p.view === "trash") state.view = p.view;
     if (p.gdGroupCollapsed) state.gdGroupCollapsed = p.gdGroupCollapsed;
+    if (typeof p.doubaoApiKey === "string") state.doubaoApiKey = p.doubaoApiKey;
+    if (typeof p.doubaoModel === "string") state.doubaoModel = p.doubaoModel;
   } catch (_) {}
 }
 function savePrefs() {
@@ -207,6 +265,8 @@ function savePrefs() {
     gdGroupCollapsed: state.gdGroupCollapsed,
     activeSectionId: state.activeSectionId,
     view: state.view,
+    doubaoApiKey: state.doubaoApiKey,
+    doubaoModel: state.doubaoModel,
   }));
 }
 
@@ -1082,7 +1142,8 @@ async function openEditor(recId, presetModuleId) {
         tagInput.value = r.keywords.slice(0, 5).join(", ");
       }
       const pages = r.stats.pageCount ? `（${r.stats.pageCount} 页）` : "";
-      toast("已生成内容概括" + pages);
+      if (r.source === "doubao") toast("✨ 豆包已生成摘要" + pages);
+      else toast((state.doubaoApiKey ? "豆包调用失败，已用本地概括" : "已生成内容概括") + pages);
     } catch (e) {
       toast("概括失败：" + (e.message || e));
     } finally {
@@ -1422,7 +1483,7 @@ function openSettings() {
     <div class="modal form-modal" style="max-width:440px">
       <div class="modal-head">
         <span class="mh-emoji">⚙️</span>
-        <span class="mh-title">关于数据存储</span>
+        <span class="mh-title">设置</span>
         <button class="modal-close">×</button>
       </div>
       <div class="form-body" style="line-height:1.9;font-size:14px;color:var(--text)">
@@ -1430,15 +1491,34 @@ function openSettings() {
         <p>💾 <b>如何备份</b>：点左下角「⤓ 完整备份」可导出包含所有附件的备份文件；「📄 导出文本」导出纯文字版。建议定期导出留底。</p>
         <p>♻️ <b>如何恢复</b>：点「⤒ 导入」选择备份文件即可还原。</p>
         <p>⚠️ <b>注意</b>：清除浏览器/微信的缓存或存储空间会删除本地数据，请务必先备份。</p>
+        <hr style="border:none;border-top:1px solid var(--border-soft);margin:14px 0" />
+        <div class="field">
+          <label>✨ 豆包 AI 概括（可选）</label>
+          <input id="f_doubaoKey" type="password" placeholder="粘贴火山方舟 API Key（留空则用本地概括）" value="${esc(state.doubaoApiKey)}" style="width:100%;padding:10px 12px;border:2px solid var(--border);border-radius:var(--capsule);font-size:13px;outline:none" />
+          <div class="hint">填入后，「✨ 智能概括」会调用豆包做更聪明的总结与标签；不填则纯本地处理、内容不上传。Key 仅保存在你本机浏览器。</div>
+        </div>
+        <div class="field">
+          <label>豆包模型（可选）</label>
+          <input id="f_doubaoModel" type="text" placeholder="doubao-seed-1-6-250615" value="${esc(state.doubaoModel)}" style="width:100%;padding:10px 12px;border:2px solid var(--border);border-radius:var(--capsule);font-size:13px;outline:none" />
+          <div class="hint">火山方舟上的豆包模型 ID，默认即可；若你的账号模型不同可改。</div>
+        </div>
       </div>
       <div class="form-footer">
-        <button class="btn-save">我知道了</button>
+        <button class="btn-cancel">取消</button>
+        <button class="btn-save">保存</button>
       </div>
     </div>`;
   $("#modalRoot").appendChild(overlay);
   $(".modal-close", overlay).onclick = () => overlay.remove();
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
-  $(".btn-save", overlay).onclick = () => overlay.remove();
+  $(".btn-cancel", overlay).onclick = () => overlay.remove();
+  $(".btn-save", overlay).onclick = () => {
+    state.doubaoApiKey = $("#f_doubaoKey", overlay).value.trim();
+    state.doubaoModel = $("#f_doubaoModel", overlay).value.trim() || "doubao-seed-1-6-250615";
+    savePrefs();
+    overlay.remove();
+    toast("设置已保存");
+  };
 }
 
 /* ============================================================
