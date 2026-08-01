@@ -278,8 +278,7 @@ async function init() {
   // 1. 打开本地数据库（失败则后续只能跑在内存模式，尽量不影响界面）
   try { await openDB(); } catch (e) { console.warn("IndexedDB 打开失败：", e); }
   try { loadPrefs(); } catch (e) { console.warn("读取偏好失败：", e); }
-  // 每次刷新都从「小琦的 Hello Kitty 星球」首页进入，不记忆上次停留的视图
-  state.view = "splash";
+  // 刷新后保留上次停留的视图（loadPrefs 已恢复 state.view），不强制跳回首页
 
   // 2. 先以本地 IndexedDB 加载（离线 / file:// 也能用）
   try {
