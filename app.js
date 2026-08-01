@@ -105,33 +105,46 @@ async function extractImageText(blob) {
   } finally { URL.revokeObjectURL(url); }
 }
 /* 本地 AI 解析：纯前端摘要 + 关键词，不上传任何内容 */
-async function summarizeWithDoubao(text) {
-  if (!state.doubaoApiKey) throw new Error("未配置豆包 API Key");
+async function summarizeWithDoubao(text, viaProxy) {
   const trimmed = (text || "").slice(0, 8000);
+  const body = JSON.stringify({
+    model: state.doubaoModel || "doubao-seed-1-6-250615",
+    temperature: 0.3,
+    max_tokens: 400,
+    messages: [
+      { role: "system", content: "你是专业的知识整理助手，善于提炼要点与生成标签。只输出要求的字段，不要多余解释。" },
+      { role: "user", content: "请总结下面这段内容，并给出 3-6 个关键词。\n用如下 JSON 格式返回（不要包含代码块标记）：\n{\"summary\":\"一段话摘要，不超过 120 字\",\"keywords\":[\"关键词1\",\"关键词2\"]}\n\n文本内容：\n" + trimmed },
+    ],
+  });
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 20000);
   let resp;
   try {
-    resp = await fetch("https://ark.cn-beijing.volces.com/api/v3/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + state.doubaoApiKey,
-      },
-      body: JSON.stringify({
-        model: state.doubaoModel || "doubao-seed-1-6-250615",
-        temperature: 0.3,
-        max_tokens: 400,
-        messages: [
-          { role: "system", content: "你是专业的知识整理助手，善于提炼要点与生成标签。只输出要求的字段，不要多余解释。" },
-          { role: "user", content: "请总结下面这段内容，并给出 3-6 个关键词。\n用如下 JSON 格式返回（不要包含代码块标记）：\n{\"summary\":\"一段话摘要，不超过 120 字\",\"keywords\":[\"关键词1\",\"关键词2\"]}\n\n文本内容：\n" + trimmed },
-        ],
-      }),
-      signal: ctrl.signal,
-    });
+    if (viaProxy) {
+      // 走 Cloudflare Worker 代理：前端只发内容，Key 在 Worker 环境变量里，绝不暴露给浏览器
+      if (!state.doubaoProxy) throw new Error("未配置豆包代理地址");
+      resp = await fetch(state.doubaoProxy, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        signal: ctrl.signal,
+      });
+    } else {
+      // 直连火山方舟：浏览器直连大概率被跨域(CORS)拦截，失败会自动回退本地
+      if (!state.doubaoApiKey) throw new Error("未配置豆包 API Key");
+      resp = await fetch("https://ark.cn-beijing.volces.com/api/v3/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + state.doubaoApiKey,
+        },
+        body,
+        signal: ctrl.signal,
+      });
+    }
   } catch (e) {
     clearTimeout(timer);
-    throw new Error("网络/CORS 错误：" + (e.message || e));
+    throw new Error((viaProxy ? "代理" : "网络/CORS") + "错误：" + (e.message || e));
   }
   clearTimeout(timer);
   if (!resp.ok) throw new Error("豆包返回 " + resp.status);
@@ -152,11 +165,13 @@ async function analyzeBlob(blob, fileType) {
   else if (fileType === "text") text = await blob.text();
   else if (fileType === "image") text = await extractImageText(blob);
   let sum, source = "local";
-  if (state.doubaoApiKey && text.trim()) {
+  const useProxy = !!state.doubaoProxy && text.trim();
+  const useKey = !!state.doubaoApiKey && text.trim();
+  if (useProxy || useKey) {
     try {
-      const ai = await summarizeWithDoubao(text);
+      const ai = await summarizeWithDoubao(text, useProxy);
       sum = { summary: ai.summary, keywords: ai.keywords, stats: {} };
-      source = "doubao";
+      source = useProxy ? "doubao-proxy" : "doubao";
     } catch (e) {
       console.warn("豆包概括失败，回退本地：", e);
       sum = summarizeText(text);
@@ -237,8 +252,9 @@ const PRESETS = [
   gdGroupCollapsed: {},   // 全局目录分组折叠态
   searchQuery: "",
   timeFilter: "all",      // 时间筛选：all | 7d | 30d | year
-  doubaoApiKey: "",       // 用户自填的火山方舟 API Key（仅存本机 localStorage）
+  doubaoApiKey: "",       // 用户自填的火山方舟 API Key（仅存本机 localStorage，直连模式用）
   doubaoModel: "doubao-seed-1-6-250615",  // 豆包模型 ID
+  doubaoProxy: "",       // 豆包代理地址（Cloudflare Worker + 自定义域名）；填了则优先走代理，前端不发 Key
 };
 
 /* UI 偏好持久化（不存知识内容，仅界面状态） */
@@ -254,6 +270,7 @@ function loadPrefs() {
     if (p.gdGroupCollapsed) state.gdGroupCollapsed = p.gdGroupCollapsed;
     if (typeof p.doubaoApiKey === "string") state.doubaoApiKey = p.doubaoApiKey;
     if (typeof p.doubaoModel === "string") state.doubaoModel = p.doubaoModel;
+    if (typeof p.doubaoProxy === "string") state.doubaoProxy = p.doubaoProxy;
   } catch (_) {}
 }
 function savePrefs() {
@@ -267,6 +284,7 @@ function savePrefs() {
     view: state.view,
     doubaoApiKey: state.doubaoApiKey,
     doubaoModel: state.doubaoModel,
+    doubaoProxy: state.doubaoProxy,
   }));
 }
 
@@ -1142,8 +1160,8 @@ async function openEditor(recId, presetModuleId) {
         tagInput.value = r.keywords.slice(0, 5).join(", ");
       }
       const pages = r.stats.pageCount ? `（${r.stats.pageCount} 页）` : "";
-      if (r.source === "doubao") toast("✨ 豆包已生成摘要" + pages);
-      else toast((state.doubaoApiKey ? "豆包调用失败，已用本地概括" : "已生成内容概括") + pages);
+      if (r.source === "doubao" || r.source === "doubao-proxy") toast("✨ 豆包已生成摘要" + pages);
+      else toast((state.doubaoApiKey || state.doubaoProxy ? "豆包调用失败，已用本地概括" : "已生成内容概括") + pages);
     } catch (e) {
       toast("概括失败：" + (e.message || e));
     } finally {
@@ -1493,9 +1511,14 @@ function openSettings() {
         <p>⚠️ <b>注意</b>：清除浏览器/微信的缓存或存储空间会删除本地数据，请务必先备份。</p>
         <hr style="border:none;border-top:1px solid var(--border-soft);margin:14px 0" />
         <div class="field">
-          <label>✨ 豆包 AI 概括（可选）</label>
+          <label>① 豆包代理地址（推荐，绕开跨域）</label>
+          <input id="f_doubaoProxy" type="text" placeholder="https://你的域名/doubao-proxy" value="${esc(state.doubaoProxy)}" style="width:100%;padding:10px 12px;border:2px solid var(--border);border-radius:var(--capsule);font-size:13px;outline:none" />
+          <div class="hint">填了「代理地址」会优先走 Cloudflare Worker 转发（需自建，Key 在 Worker 端、前端不发 Key），彻底绕开浏览器跨域(CORS)，手机端也能用。留空则只用下面的直连 Key。</div>
+        </div>
+        <div class="field">
+          <label>② 豆包 API Key（直连兜底，可选）</label>
           <input id="f_doubaoKey" type="password" placeholder="粘贴火山方舟 API Key（留空则用本地概括）" value="${esc(state.doubaoApiKey)}" style="width:100%;padding:10px 12px;border:2px solid var(--border);border-radius:var(--capsule);font-size:13px;outline:none" />
-          <div class="hint">填入后，「✨ 智能概括」会调用豆包做更聪明的总结与标签；不填则纯本地处理、内容不上传。Key 仅保存在你本机浏览器。</div>
+          <div class="hint">直连模式：浏览器直连火山方舟常被跨域(CORS)拦截、自动回退本地。要稳定生效请用上面的「代理地址」。Key 仅存本机浏览器。</div>
         </div>
         <div class="field">
           <label>豆包模型（可选）</label>
@@ -1513,6 +1536,7 @@ function openSettings() {
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
   $(".btn-cancel", overlay).onclick = () => overlay.remove();
   $(".btn-save", overlay).onclick = () => {
+    state.doubaoProxy = $("#f_doubaoProxy", overlay).value.trim();
     state.doubaoApiKey = $("#f_doubaoKey", overlay).value.trim();
     state.doubaoModel = $("#f_doubaoModel", overlay).value.trim() || "doubao-seed-1-6-250615";
     savePrefs();
