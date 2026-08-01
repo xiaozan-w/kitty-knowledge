@@ -60,12 +60,12 @@
   <div id="modalRoot"></div>
   <div id="toast" class="toast hidden"></div>
 
-  <script src="https://imgcache.qq.com/qcloud/cloudbase-js-sdk/1.1.4/cloudbase.js"></script>
-  <script src="app.js?v=19"></script>
+  <script src="https://imgcache.qq.com/qcloud/cloudbase-js-sdk/1.1.4/cloudbase.full.js"></script>
+  <script src="app.js?v=20"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function() {
-        navigator.serviceWorker.register('sw.js?v=19').then(function(reg) {
+        navigator.serviceWorker.register('sw.js?v=20').then(function(reg) {
           reg.addEventListener('updatefound', function() {
             var installing = reg.installing;
             installing.addEventListener('statechange', function() {
