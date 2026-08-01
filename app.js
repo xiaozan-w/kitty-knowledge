@@ -178,57 +178,57 @@ const get_ = (name, id) => new Promise((res, rej) => {
   r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
 });
 
-/* ---------- LeanCloud 云端同步（免部署，前端直连） ----------
- * 浏览器 IndexedDB 仍是本地兜底；当在「⚙️ 同步设置」填好 LeanCloud 的
- * App ID / App Key 后，任意一次写入都会在 800ms 后同步到 LeanCloud 云端。
- * 关键：附件不塞进单一数据对象（会撞 16MB 上限），而是每个附件单独上传为
- * LeanCloud File（对象存储），云端记录只保留 URL 引用 —— 这样整库文字再大
+/* ---------- CloudBase 云端同步（免部署，前端直连） ----------
+ * 浏览器 IndexedDB 仍是本地兜底；当在「⚙️ 同步设置」填好 CloudBase 的
+ * 环境 ID 并开启匿名登录后，任意一次写入都会在 800ms 后同步到 CloudBase 云端。
+ * 关键：附件不塞进单一数据库记录（会撞单条上限），而是每个附件单独上传为
+ * CloudBase 存储文件，云端记录只保留 fileID 引用 —— 这样整库文字再大
  * 也只是一个很小的 JSON，附件积累再多都不怕。微信 / Chrome 等任意浏览器打开
- * 同一网址、填同一组 App ID/Key，看到的都是同一份数据。未配置时回退本地。 */
-let LEANCLOUD = false;
-let _lcTimer = null;
-let _lcObjectId = null;        // 云端 KittyVault 记录的 objectId
-const LC_CLASS = "KittyVault";
-const LC_SLOT = "main";
-function lcReady() { return typeof AV !== "undefined" && !!state.leanAppId && !!state.leanAppKey; }
-function initLeanCloud() {
-  if (!lcReady()) { LEANCLOUD = false; return; }
+ * 同一网址、填同一个环境 ID，看到的都是同一份数据。未配置时回退本地。
+ * 需要在 CloudBase 控制台开启：① 匿名登录；② 数据集合 kitty_vault 设为「所有用户可读写」。 */
+let CLOUDBASE = false;
+let _tcbApp = null;
+let _cbTimer = null;
+const CB_COLL = "kitty_vault";
+const CB_SLOT = "main";
+function cbReady() { return typeof tcb !== "undefined" && !!state.cbEnvId; }
+async function initCloudBase() {
+  if (!cbReady()) { CLOUDBASE = false; return; }
   try {
-    const serverURL = state.leanServerUrl || `https://${state.leanAppId}.api.lncld.net`;
-    AV.init({ appId: state.leanAppId, appKey: state.leanAppKey, serverURL });
-    LEANCLOUD = true;
-  } catch (_) { LEANCLOUD = false; }
+    _tcbApp = tcb.init({ env: state.cbEnvId });
+    await _tcbApp.auth().signInAnonymously();
+    CLOUDBASE = true;
+  } catch (e) {
+    console.error("CloudBase init failed", e);
+    CLOUDBASE = false;
+  }
 }
 function scheduleSync() {
-  if (!LEANCLOUD) return;
-  clearTimeout(_lcTimer);
-  _lcTimer = setTimeout(doSync, 800);
+  if (!CLOUDBASE) return;
+  clearTimeout(_cbTimer);
+  _cbTimer = setTimeout(doSync, 800);
 }
 async function doSync() {
-  if (!LEANCLOUD) return;
+  if (!CLOUDBASE) return;
   try {
-    // 每个附件单独上传为 LeanCloud File（对象存储），云端只留 URL 引用，
-    // 这样 Vault 数据对象只含文字，永远不会撞 16MB 单对象上限。
+    // 每个附件单独上传为 CloudBase 存储文件，云端只留 fileID 引用，
+    // 这样 Vault 数据库记录只含文字，永远不会撞单条上限。
     let skippedBig = false;
     for (const r of state.records) {
-      if (r.blob && !r._lcFileUrl) {
+      if (r.blob && !r._cbFileUrl) {
         if ((r.blob.size || 0) > 15 * 1024 * 1024) { skippedBig = true; continue; }
         try {
-          const ext = (r._blobType || "").split("/")[1] || "bin";
-          const file = new AV.File(`${r.id}.${ext}`, r.blob, r.blob.type);
-          const acl = new AV.ACL();
-          acl.setPublicReadAccess(true);   // 跨浏览器可直接下载
-          acl.setPublicWriteAccess(false);
-          file.setACL(acl);
-          await file.save();
-          r._lcFileUrl = file.url();
-          r._lcFileId = file.id;
+          const ext = (r._blobType || r.blob.type || "bin").split("/").pop().split("+")[0] || "bin";
+          const safeExt = /^[a-z0-9]+$/i.test(ext) ? ext : "bin";
+          const cloudPath = `kitty/${r.id}-${Date.now()}.${safeExt}`;
+          const res = await _tcbApp.storage().uploadFile({ cloudPath, filePath: r.blob });
+          r._cbFileUrl = res.fileID;
         } catch (e) {
           console.error("附件上传失败", r.id, e);
         }
       }
     }
-    // 只写文字 + 附件 URL 引用，绝不把 base64 塞进数据对象
+    // 只写文字 + 附件 fileID 引用，绝不把 base64 塞进数据库记录
     const payload = {
       app: "pkWorkbench", version: 1, exportedAt: Date.now(),
       sections: state.sections,
@@ -238,40 +238,39 @@ async function doSync() {
         return { ...rest, _blobType: blob ? blob.type : (rest._blobType || null) };
       }),
     };
-    const q = new AV.Query(LC_CLASS);
-    q.equalTo("slot", LC_SLOT);
-    let obj = await q.first();
-    if (!obj) { obj = new AV.Object(LC_CLASS); obj.set("slot", LC_SLOT); }
-    obj.set("data", payload);
-    obj.set("updatedAt", Date.now());
-    await obj.save();
-    _lcObjectId = obj.id;
+    const db = _tcbApp.database();
+    const coll = db.collection(CB_COLL);
+    const existing = await coll.where({ slot: CB_SLOT }).get();
+    if (existing.data.length === 0) {
+      await coll.add({ slot: CB_SLOT, data: payload, updatedAt: Date.now() });
+    } else {
+      await coll.doc(existing.data[0]._id).set({ data: payload, updatedAt: Date.now() });
+    }
     if (skippedBig) toast("提示：个别超大附件（>15MB）未同步，文字已同步");
   } catch (e) {
-    console.error("LeanCloud push failed", e);
-    const msg = String((e && e.message) || "");
-    if (msg.includes("too large") || msg.includes("413") || (e && e.code === 413)) {
-      toast("同步失败：单条数据过大，请删除超大附件记录");
-    }
+    console.error("CloudBase push failed", e);
   }
 }
-async function pullLeanCloud() {
-  if (!LEANCLOUD) return;
+async function pullCloudBase() {
+  if (!CLOUDBASE) return;
   try {
-    const q = new AV.Query(LC_CLASS);
-    q.equalTo("slot", LC_SLOT);
-    const obj = await q.first();
-    if (!obj) return;
-    const payload = obj.get("data");
+    const db = _tcbApp.database();
+    const res = await db.collection(CB_COLL).where({ slot: CB_SLOT }).get();
+    if (!res.data.length) return;
+    const payload = res.data[0].data;
     if (!payload || (!payload.sections && !payload.records)) return;
     // 保留本机已有的 blob，避免重复下载
     const localBlobs = new Map(state.records.filter((r) => r.blob).map((r) => [r.id, r.blob]));
     const recs = await Promise.all((payload.records || []).map(async (r) => {
       const out = { ...r };
-      if (!out.blob && r._lcFileUrl) {
+      if (!out.blob && r._cbFileUrl) {
         try {
-          const resp = await fetch(r._lcFileUrl);
-          if (resp.ok) out.blob = await resp.blob();
+          const tmp = await _tcbApp.storage().getTempFileURL({ fileList: [r._cbFileUrl] });
+          const url = tmp.fileList && tmp.fileList[0] && tmp.fileList[0].tempFileURL;
+          if (url) {
+            const resp = await fetch(url);
+            if (resp.ok) out.blob = await resp.blob();
+          }
         } catch (_) {}
       }
       if (!out.blob && localBlobs.has(r.id)) out.blob = localBlobs.get(r.id);
@@ -280,11 +279,10 @@ async function pullLeanCloud() {
     state.sections = payload.sections || [];
     state.modules = payload.modules || [];
     state.records = recs;
-    _lcObjectId = obj.id;
     await persistToIDB();
     toast("已从云端同步");
   } catch (e) {
-    console.error("LeanCloud pull failed", e);
+    console.error("CloudBase pull failed", e);
     toast("云端拉取失败：" + ((e && (e.message || e.error)) || "未知错误"));
   }
 }
@@ -325,9 +323,7 @@ const PRESETS = [
   doubaoModel: "",        // 豆包模型 ID
   timeFilter: "all",      // 时间筛选：all | 7d | 30d | year
   aiWorkerUrl: "",         // 联网 AI 代理（Cloudflare Worker 地址，选填）
-  leanAppId: "",           // LeanCloud App ID（云端同步用）
-  leanAppKey: "",          // LeanCloud App Key
-  leanServerUrl: "",       // 可选：自定义 API 域名
+  cbEnvId: "",             // CloudBase 环境 ID（云端同步用）
 };
 
 /* UI 偏好持久化（不存知识内容，仅界面状态） */
@@ -342,9 +338,7 @@ function loadPrefs() {
     if (p.view === "splash" || p.view === "home" || p.view === "section" || p.view === "trash") state.view = p.view;
     if (p.gdGroupCollapsed) state.gdGroupCollapsed = p.gdGroupCollapsed;
     if (typeof p.aiWorkerUrl === "string") state.aiWorkerUrl = p.aiWorkerUrl;
-    if (typeof p.leanAppId === "string") state.leanAppId = p.leanAppId;
-    if (typeof p.leanAppKey === "string") state.leanAppKey = p.leanAppKey;
-    if (typeof p.leanServerUrl === "string") state.leanServerUrl = p.leanServerUrl;
+    if (typeof p.cbEnvId === "string") state.cbEnvId = p.cbEnvId;
     // 兼容旧版一次性迁移：如果还留有旧 Worker 配置但新版未配置，则迁移时丢弃（Worker 已不可用）
   } catch (_) {}
 }
@@ -358,9 +352,7 @@ function savePrefs() {
     activeSectionId: state.activeSectionId,
     view: state.view,
     aiWorkerUrl: state.aiWorkerUrl,
-    leanAppId: state.leanAppId,
-    leanAppKey: state.leanAppKey,
-    leanServerUrl: state.leanServerUrl,
+    cbEnvId: state.cbEnvId,
   }));
 }
 
@@ -369,17 +361,17 @@ async function init() {
   await openDB();
   loadPrefs();
 
-  // 初始化 LeanCloud（若已在设置里填好 App ID / App Key）
-  initLeanCloud();
+  // 初始化 CloudBase（若已在设置里填好环境 ID 并开启匿名登录）
+  await initCloudBase();
 
   // 先以本地 IndexedDB 兜底加载（离线 / file:// 也能用）
   state.sections = await all_("sections");
   state.modules = await all_("modules");
   state.records = await all_("records");
 
-  // LeanCloud 已配置 -> 以云端为准（保证上传的文件跨浏览器/设备都在）
-  if (LEANCLOUD) {
-    try { await pullLeanCloud(); } catch (_) {}
+  // CloudBase 已配置 -> 以云端为准（保证上传的文件跨浏览器/设备都在）
+  if (CLOUDBASE) {
+    try { await pullCloudBase(); } catch (_) {}
   }
 
   if (state.sections.length === 0) {
@@ -1573,19 +1565,11 @@ function openSettings() {
         <button class="modal-close">×</button>
       </div>
       <div class="form-body">
-        <div class="field-group-title">☁️ 云端同步（LeanCloud，免部署）</div>
+        <div class="field-group-title">☁️ 云端同步（CloudBase，免部署）</div>
         <div class="field">
-          <label>LeanCloud App ID</label>
-          <input type="text" id="s_lc_id" value="${esc(state.leanAppId)}" placeholder="填入 LeanCloud 应用的 App ID" />
-        </div>
-        <div class="field">
-          <label>LeanCloud App Key</label>
-          <input type="password" id="s_lc_key" value="${esc(state.leanAppKey)}" placeholder="填入 LeanCloud 应用的 App Key" />
-          <div class="hint">在 leancloud.app 免费创建应用，复制「设置 → 应用凭证」里的 App ID 与 App Key。微信 / Chrome 填同一组，即共享同一份数据。详见 DEPLOY_LEANCLOUD.md。</div>
-        </div>
-        <div class="field">
-          <label>API 域名（选填）</label>
-          <input type="text" id="s_lc_url" value="${esc(state.leanServerUrl)}" placeholder="留空则用默认国内域名" />
+          <label>CloudBase 环境 ID</label>
+          <input type="text" id="s_cb_env" value="${esc(state.cbEnvId)}" placeholder="填入 CloudBase 控制台的环境 ID" />
+          <div class="hint">在腾讯云 CloudBase 创建环境后，复制「环境 → 环境 ID」。需开启「匿名登录」并把数据集合 kitty_vault 设为「所有用户可读写」。微信 / Chrome 填同一个环境 ID，即共享同一份数据。详见 DEPLOY_CLOUDBASE.md。</div>
         </div>
 
         <div class="field-group-title">✨ AI 智能概括（选填）</div>
@@ -1615,32 +1599,28 @@ function openSettings() {
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
   $(".btn-cancel", overlay).onclick = () => overlay.remove();
   $(".btn-save", overlay).onclick = async () => {
-    state.leanAppId = $("#s_lc_id", overlay).value.trim();
-    state.leanAppKey = $("#s_lc_key", overlay).value.trim();
-    state.leanServerUrl = $("#s_lc_url", overlay).value.trim();
+    state.cbEnvId = $("#s_cb_env", overlay).value.trim();
     state.doubaoApiKey = $("#s_apikey", overlay).value.trim();
     state.doubaoModel = $("#s_model", overlay).value.trim();
     state.aiWorkerUrl = $("#s_worker", overlay).value.trim();
     savePrefs();
-    initLeanCloud();
-    if (LEANCLOUD) {
-      try { await pullLeanCloud(); renderSidebar(); renderMain(); toast("已连接云端并开始同步"); }
-      catch (e) { toast("连接云端失败：" + ((e && e.message) || "请检查 App ID/Key")); }
-    } else if (state.leanAppId || state.leanAppKey) {
-      toast("连接云端失败：请检查 App ID / App Key");
+    await initCloudBase();
+    if (CLOUDBASE) {
+      try { await pullCloudBase(); renderSidebar(); renderMain(); toast("已连接云端并开始同步"); }
+      catch (e) { toast("连接云端失败：" + ((e && e.message) || "请检查环境 ID")); }
+    } else if (state.cbEnvId) {
+      toast("连接云端失败：请检查环境 ID，并确认已开启匿名登录");
     } else {
       toast("设置已保存（未配置云端同步）");
     }
     overlay.remove();
   };
   $(".btn-sync", overlay).onclick = async () => {
-    state.leanAppId = $("#s_lc_id", overlay).value.trim();
-    state.leanAppKey = $("#s_lc_key", overlay).value.trim();
-    state.leanServerUrl = $("#s_lc_url", overlay).value.trim();
+    state.cbEnvId = $("#s_cb_env", overlay).value.trim();
     savePrefs();
-    initLeanCloud();
-    if (!LEANCLOUD) { toast("请先填好 LeanCloud 的 App ID / App Key"); return; }
-    await pullLeanCloud();
+    await initCloudBase();
+    if (!CLOUDBASE) { toast("请先填好 CloudBase 的环境 ID，并确认已开启匿名登录"); return; }
+    await pullCloudBase();
     await doSync();
     renderSidebar();
     renderMain();
