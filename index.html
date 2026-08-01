@@ -65,7 +65,7 @@
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function() {
-        navigator.serviceWorker.register('sw.js?v=13').then(function(reg) {
+        navigator.serviceWorker.register('sw.js?v=18').then(function(reg) {
           reg.addEventListener('updatefound', function() {
             var installing = reg.installing;
             installing.addEventListener('statechange', function() {
