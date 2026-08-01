@@ -450,7 +450,8 @@ function bindSectionLongPress(item, sid) {
       triggered = true;
       item.classList.add("long-pressing");
       if (navigator.vibrate) navigator.vibrate(40);
-      deleteSection(sid);
+      const s = sectionById(sid);
+      openItemActionMenu({ title: s ? s.name : "板块", onRename: () => renameSection(sid), onDelete: () => deleteSection(sid) });
       setTimeout(() => item.classList.remove("long-pressing"), 200);
     }, 600);
   };
@@ -463,6 +464,58 @@ function bindSectionLongPress(item, sid) {
   item.addEventListener("click", (e) => {
     if (triggered) { e.preventDefault(); e.stopPropagation(); triggered = false; }
   });
+}
+
+/* 子模块长按：弹出「重命名 / 删除」菜单（与板块长按一致） */
+let moduleClickSuppressUntil = 0;
+function bindModuleLongPress(head, mid) {
+  let timer = null, triggered = false;
+  const start = (e) => {
+    if (e.type === "pointerdown" && e.button !== 0) return;
+    if (e.target.closest(".mh-actions")) return; // 操作按钮有自身点击
+    triggered = false;
+    timer = setTimeout(() => {
+      triggered = true;
+      head.classList.add("long-pressing");
+      if (navigator.vibrate) navigator.vibrate(40);
+      moduleClickSuppressUntil = Date.now() + 800; // 抑制长按后的释放点击误触折叠
+      const m = moduleById(mid);
+      openItemActionMenu({ title: m ? m.name : "子模块", onRename: () => renameModule(mid), onDelete: () => deleteModule(mid) });
+      setTimeout(() => head.classList.remove("long-pressing"), 200);
+    }, 600);
+  };
+  const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  head.addEventListener("pointerdown", start);
+  head.addEventListener("pointermove", () => clear());
+  head.addEventListener("pointerup", clear);
+  head.addEventListener("pointerleave", clear);
+  head.addEventListener("pointercancel", clear);
+  head.addEventListener("click", (e) => {
+    if (triggered) { e.preventDefault(); triggered = false; }
+  });
+}
+
+/* 长按菜单：重命名 / 删除（板块与子模块共用） */
+function openItemActionMenu({ title, onRename, onDelete }) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.innerHTML = `
+    <div class="modal form-modal" style="max-width:340px">
+      <div class="modal-head">
+        <span class="mh-emoji">⚙️</span>
+        <span class="mh-title">${esc(title)}</span>
+        <button class="modal-close">×</button>
+      </div>
+      <div class="form-body" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+        <button class="act-menu-btn rename" data-act="rename">✏️ 重命名</button>
+        <button class="act-menu-btn delete" data-act="delete">🗑 删除</button>
+      </div>
+    </div>`;
+  $("#modalRoot").appendChild(overlay);
+  $(".modal-close", overlay).onclick = () => overlay.remove();
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  $("[data-act=rename]", overlay).onclick = () => { overlay.remove(); onRename(); };
+  $("[data-act=delete]", overlay).onclick = () => { overlay.remove(); onDelete(); };
 }
 
 /* 模块拖拽排序（仅限同板块内） */
@@ -629,11 +682,13 @@ function renderMain() {
   $$(".module-head", content).forEach((h) => {
     h.addEventListener("click", (e) => {
       if (e.target.closest(".mh-actions")) return;
+      if (Date.now() < moduleClickSuppressUntil) return; // 长按菜单触发后的释放点击，忽略折叠
       const id = h.dataset.mod;
       state.moduleCollapsed[id] = !state.moduleCollapsed[id];
       savePrefs(); h.closest(".module-card").classList.toggle("collapsed");
     });
     bindModuleDnD(h, h.dataset.mod);
+    bindModuleLongPress(h, h.dataset.mod);
   });
   // 目录/卡片点击 → 弹窗；长按进入多选模式
   $$("[data-rec]", content).forEach((el) => {
@@ -1064,6 +1119,32 @@ async function openAddModule() {
   savePrefs();
   renderSidebar(); renderMain();
   toast("已新增子模块「" + m.name + "」");
+}
+
+async function renameSection(sid) {
+  const s = sectionById(sid);
+  if (!s) return;
+  const name = prompt("修改板块名称：", s.name);
+  if (name === null) return;
+  const t = name.trim();
+  if (!t) return;
+  s.name = t; s.updatedAt = Date.now();
+  await put_("sections", s);
+  renderSidebar(); renderMain();
+  toast("已重命名板块「" + t + "」");
+}
+
+async function renameModule(mid) {
+  const m = moduleById(mid);
+  if (!m) return;
+  const name = prompt("修改子模块名称：", m.name);
+  if (name === null) return;
+  const t = name.trim();
+  if (!t) return;
+  m.name = t; m.updatedAt = Date.now();
+  await put_("modules", m);
+  renderSidebar(); renderMain();
+  toast("已重命名子模块「" + t + "」");
 }
 
 async function deleteModule(mid) {

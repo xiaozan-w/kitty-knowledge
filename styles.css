@@ -131,6 +131,7 @@ body::before {
 
 .section-item.dragging { opacity: 0.4; }
 .section-item.long-pressing { transform: scale(0.96); background: var(--primary-soft); transition: transform 0.1s, background 0.1s; }
+.module-head.long-pressing { background: var(--primary-soft); border-radius: var(--radius); transition: background 0.1s; }
 
 /* 图标选择器 */
 .icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 8px; padding: 4px 0; }
@@ -613,6 +614,15 @@ body::before {
 .btn-save:hover { transform: translateY(-2px) scale(1.02); }
 .btn-sync { background: var(--primary-soft); color: var(--primary-deep); }
 .btn-sync:hover { transform: translateY(-2px) scale(1.02); }
+
+/* 长按菜单按钮（重命名 / 删除） */
+.act-menu-btn {
+  width: 100%; padding: 12px 16px; border: none; border-radius: var(--capsule);
+  font-size: 15px; font-weight: 700; cursor: pointer; transition: transform 0.12s, box-shadow 0.2s;
+}
+.act-menu-btn.rename { background: linear-gradient(135deg, var(--primary), var(--primary-deep)); color: #fff; box-shadow: var(--shadow-soft); }
+.act-menu-btn.delete { background: #fff0f1; color: #d6455a; border: 2px solid #f3c2c8; }
+.act-menu-btn:hover { transform: translateY(-2px); }
 
 /* ===================== 🎀 设置弹窗 ===================== */
 .settings-modal { width: 420px; height: auto; }
