@@ -187,6 +187,7 @@ const get_ = (name, id) => new Promise((res, rej) => {
  * 同一网址、填同一个环境 ID，看到的都是同一份数据。未配置时回退本地。
  * 需要在 CloudBase 控制台开启：① 匿名登录；② 数据集合 kitty_vault 设为「所有用户可读写」。 */
 let CLOUDBASE = false;
+let _cbApp = null;
 let _cbTimer = null;
 let _cbLastError = "";
 const CB_COLL = "kitty_vault";
@@ -195,8 +196,9 @@ function cbReady() { return typeof cloudbase !== "undefined" && !!state.cbEnvId;
 async function initCloudBase() {
   if (!cbReady()) { CLOUDBASE = false; return; }
   try {
-    cloudbase.init({ env: state.cbEnvId });
-    await cloudbase.auth().signInAnonymously();
+    _cbApp = cloudbase.init({ env: state.cbEnvId });
+    const auth = _cbApp.auth({ persistence: "local" });
+    await auth.signInAnonymously();
     _cbLastError = "";
     CLOUDBASE = true;
   } catch (e) {
@@ -223,7 +225,7 @@ async function doSync() {
           const ext = (r._blobType || r.blob.type || "bin").split("/").pop().split("+")[0] || "bin";
           const safeExt = /^[a-z0-9]+$/i.test(ext) ? ext : "bin";
           const cloudPath = `kitty/${r.id}-${Date.now()}.${safeExt}`;
-          const res = await cloudbase.storage().uploadFile({ cloudPath, filePath: r.blob });
+          const res = await _cbApp.storage().uploadFile({ cloudPath, fileContent: r.blob });
           r._cbFileUrl = res.fileID;
         } catch (e) {
           console.error("附件上传失败", r.id, e);
@@ -240,7 +242,7 @@ async function doSync() {
         return { ...rest, _blobType: blob ? blob.type : (rest._blobType || null) };
       }),
     };
-    const db = cloudbase.database();
+    const db = _cbApp.database();
     const coll = db.collection(CB_COLL);
     const existing = await coll.where({ slot: CB_SLOT }).get();
     if (existing.data.length === 0) {
@@ -256,7 +258,7 @@ async function doSync() {
 async function pullCloudBase() {
   if (!CLOUDBASE) return;
   try {
-    const db = cloudbase.database();
+    const db = _cbApp.database();
     const res = await db.collection(CB_COLL).where({ slot: CB_SLOT }).get();
     if (!res.data.length) return;
     const payload = res.data[0].data;
@@ -267,7 +269,7 @@ async function pullCloudBase() {
       const out = { ...r };
       if (!out.blob && r._cbFileUrl) {
         try {
-          const tmp = await cloudbase.storage().getTempFileURL({ fileList: [r._cbFileUrl] });
+          const tmp = await _cbApp.storage().getTempFileURL({ fileList: [r._cbFileUrl] });
           const url = tmp.fileList && tmp.fileList[0] && tmp.fileList[0].tempFileURL;
           if (url) {
             const resp = await fetch(url);
