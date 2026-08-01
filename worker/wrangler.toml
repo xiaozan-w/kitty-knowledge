@@ -1,0 +1,8 @@
+name = "kitty-vault-sync"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+
+# 绑定一个 R2 存储桶（在 Cloudflare 控制台先创建 bucket，名字填在这里）
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "kitty-vault"

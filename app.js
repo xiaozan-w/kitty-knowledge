@@ -178,61 +178,65 @@ const get_ = (name, id) => new Promise((res, rej) => {
   r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
 });
 
-/* ---------- CloudBase 云端同步（免部署，前端直连） ----------
- * 浏览器 IndexedDB 仍是本地兜底；当在「⚙️ 同步设置」填好 CloudBase 的
- * 环境 ID 并开启匿名登录后，任意一次写入都会在 800ms 后同步到 CloudBase 云端。
- * 关键：附件不塞进单一数据库记录（会撞单条上限），而是每个附件单独上传为
- * CloudBase 存储文件，云端记录只保留 fileID 引用 —— 这样整库文字再大
- * 也只是一个很小的 JSON，附件积累再多都不怕。微信 / Chrome 等任意浏览器打开
- * 同一网址、填同一个环境 ID，看到的都是同一份数据。未配置时回退本地。
- * 需要在 CloudBase 控制台开启：① 匿名登录；② 数据集合 kitty_vault 设为「所有用户可读写」。 */
-let CLOUDBASE = false;
-let _cbApp = null;
-let _cbTimer = null;
-let _cbLastError = "";
-const CB_COLL = "kitty_vault";
-const CB_SLOT = "main";
-function cbReady() { return typeof cloudbase !== "undefined" && !!state.cbEnvId; }
-async function initCloudBase() {
-  if (!cbReady()) { CLOUDBASE = false; return; }
-  try {
-    _cbApp = cloudbase.init({ env: state.cbEnvId });
-    const auth = _cbApp.auth({ persistence: "local" });
-    await auth.signInAnonymously();
-    _cbLastError = "";
-    CLOUDBASE = true;
-  } catch (e) {
-    _cbLastError = (e && (e.message || e.errMsg || String(e))) || "未知错误";
-    console.error("CloudBase init failed", e);
-    CLOUDBASE = false;
-  }
+/* ---------- Cloudflare Workers + R2 云端同步（免服务器，免费） ----------
+ * 浏览器 IndexedDB 仍是本地兜底；当在「⚙️ 同步设置」填好 Worker URL 和共享密钥后，
+ * 任意一次写入都会在 800ms 后同步到 Cloudflare 上的 Worker（数据存于 R2 存储桶）。
+ * 关键：附件不塞进同步 JSON（会撞体积上限），而是每个附件单独上传到 R2（/file/{id}），
+ * 云端 JSON 只保留引用 —— 这样整库文字再大也只是一个很小的 JSON。微信 / Chrome 等任意
+ * 浏览器打开同一网址、填同一个 Worker URL + 密钥，看到的都是同一份数据。未配置时回退本地。
+ * 后端代码见 worker/worker.js（部署到 Cloudflare Workers，免费额度够个人长期用）。 */
+let CLOUDFLARE = false;
+let _cfTimer = null;
+let _cfLastError = "";
+function cfReady() { return !!state.cfWorkerUrl && !!state.cfSecret; }
+async function initCloudflare() {
+  // 无状态：只要填了 URL + 密钥即视为可用，真正鉴权在首次请求时由 Worker 校验
+  CLOUDFLARE = cfReady();
+  _cfLastError = "";
 }
 function scheduleSync() {
-  if (!CLOUDBASE) return;
-  clearTimeout(_cbTimer);
-  _cbTimer = setTimeout(doSync, 800);
+  if (!CLOUDFLARE) return;
+  clearTimeout(_cfTimer);
+  _cfTimer = setTimeout(doSync, 800);
+}
+async function cfPut(path, body, isBlob) {
+  const base = state.cfWorkerUrl.replace(/\/$/, "");
+  const u = base + path + (path.includes("?") ? "&" : "?") + "key=" + encodeURIComponent(state.cfSecret);
+  const opts = { method: "PUT", headers: { "X-Vault-Key": state.cfSecret } };
+  if (isBlob) {
+    opts.body = body;
+    if (body && body.type) opts.headers["Content-Type"] = body.type;
+  } else {
+    opts.body = typeof body === "string" ? body : JSON.stringify(body);
+    opts.headers["Content-Type"] = "application/json";
+  }
+  const resp = await fetch(u, opts);
+  if (!resp.ok) {
+    const txt = await resp.text().catch(() => "");
+    throw new Error("HTTP " + resp.status + " " + txt);
+  }
+  return resp;
 }
 async function doSync() {
-  if (!CLOUDBASE) return;
+  if (!CLOUDFLARE) return;
   try {
-    // 每个附件单独上传为 CloudBase 存储文件，云端只留 fileID 引用，
-    // 这样 Vault 数据库记录只含文字，永远不会撞单条上限。
+    // 1) 附件单独上传到 R2（/file/{id}），JSON 只留引用
     let skippedBig = false;
     for (const r of state.records) {
-      if (r.blob && !r._cbFileUrl) {
+      if (r.blob && !r._cfFileUrl) {
         if ((r.blob.size || 0) > 100 * 1024 * 1024) { skippedBig = true; continue; }
         try {
           const ext = (r._blobType || r.blob.type || "bin").split("/").pop().split("+")[0] || "bin";
           const safeExt = /^[a-z0-9]+$/i.test(ext) ? ext : "bin";
-          const cloudPath = `kitty/${r.id}-${Date.now()}.${safeExt}`;
-          const res = await _cbApp.uploadFile({ cloudPath, filePath: r.blob });
-          r._cbFileUrl = res.fileID;
+          const fileId = `${r.id}-${Date.now()}.${safeExt}`;
+          await cfPut(`/file/${encodeURIComponent(fileId)}`, r.blob, true);
+          r._cfFileUrl = fileId;
         } catch (e) {
           console.error("附件上传失败", r.id, e);
         }
       }
     }
-    // 只写文字 + 附件 fileID 引用，绝不把 base64 塞进数据库记录
+    // 2) 只写文字 + 附件引用（绝不把 base64 塞进 JSON）
     const payload = {
       app: "pkWorkbench", version: 1, exportedAt: Date.now(),
       sections: state.sections,
@@ -242,39 +246,32 @@ async function doSync() {
         return { ...rest, _blobType: blob ? blob.type : (rest._blobType || null) };
       }),
     };
-    const db = _cbApp.database();
-    const coll = db.collection(CB_COLL);
-    const existing = await coll.where({ slot: CB_SLOT }).get();
-    if (existing.data.length === 0) {
-      await coll.add({ slot: CB_SLOT, data: payload, updatedAt: Date.now() });
-    } else {
-      await coll.doc(existing.data[0]._id).set({ data: payload, updatedAt: Date.now() });
-    }
+    await cfPut("/sync", payload, false);
+    _cfLastError = "";
     if (skippedBig) toast("提示：个别超大附件（>100MB）未同步，文字已同步");
   } catch (e) {
-    console.error("CloudBase push failed", e);
+    _cfLastError = (e && (e.message || String(e))) || "未知错误";
+    console.error("Cloudflare push failed", e);
   }
 }
-async function pullCloudBase() {
-  if (!CLOUDBASE) return;
+async function pullCloudflare() {
+  if (!CLOUDFLARE) return;
   try {
-    const db = _cbApp.database();
-    const res = await db.collection(CB_COLL).where({ slot: CB_SLOT }).get();
-    if (!res.data.length) return;
-    const payload = res.data[0].data;
+    const base = state.cfWorkerUrl.replace(/\/$/, "");
+    const u = base + "/sync?key=" + encodeURIComponent(state.cfSecret);
+    const resp = await fetch(u, { headers: { "X-Vault-Key": state.cfSecret } });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const payload = await resp.json();
     if (!payload || (!payload.sections && !payload.records)) return;
-    // 保留本机已有的 blob，避免重复下载
+    // 保留本机已有 blob，避免重复下载
     const localBlobs = new Map(state.records.filter((r) => r.blob).map((r) => [r.id, r.blob]));
     const recs = await Promise.all((payload.records || []).map(async (r) => {
       const out = { ...r };
-      if (!out.blob && r._cbFileUrl) {
+      if (!out.blob && r._cfFileUrl) {
         try {
-          const tmp = await _cbApp.getTempFileURL({ fileList: [r._cbFileUrl] });
-          const url = tmp.fileList && tmp.fileList[0] && tmp.fileList[0].tempFileURL;
-          if (url) {
-            const resp = await fetch(url);
-            if (resp.ok) out.blob = await resp.blob();
-          }
+          const fu = base + "/file/" + encodeURIComponent(r._cfFileUrl) + "?key=" + encodeURIComponent(state.cfSecret);
+          const fr = await fetch(fu, { headers: { "X-Vault-Key": state.cfSecret } });
+          if (fr.ok) out.blob = await fr.blob();
         } catch (_) {}
       }
       if (!out.blob && localBlobs.has(r.id)) out.blob = localBlobs.get(r.id);
@@ -283,11 +280,13 @@ async function pullCloudBase() {
     state.sections = payload.sections || [];
     state.modules = payload.modules || [];
     state.records = recs;
+    _cfLastError = "";
     await persistToIDB();
     toast("已从云端同步");
   } catch (e) {
-    console.error("CloudBase pull failed", e);
-    toast("云端拉取失败：" + ((e && (e.message || e.error)) || "未知错误"));
+    _cfLastError = (e && (e.message || String(e))) || "未知错误";
+    console.error("Cloudflare pull failed", e);
+    toast("云端拉取失败：" + _cfLastError);
   }
 }
 
@@ -327,7 +326,8 @@ const PRESETS = [
   doubaoModel: "",        // 豆包模型 ID
   timeFilter: "all",      // 时间筛选：all | 7d | 30d | year
   aiWorkerUrl: "",         // 联网 AI 代理（Cloudflare Worker 地址，选填）
-  cbEnvId: "",             // CloudBase 环境 ID（云端同步用）
+  cfWorkerUrl: "",         // Cloudflare Worker URL（云端同步用）
+  cfSecret: "",            // Cloudflare 同步共享密钥（与 Worker 的 VAULT_KEY 一致）
 };
 
 /* UI 偏好持久化（不存知识内容，仅界面状态） */
@@ -342,7 +342,8 @@ function loadPrefs() {
     if (p.view === "splash" || p.view === "home" || p.view === "section" || p.view === "trash") state.view = p.view;
     if (p.gdGroupCollapsed) state.gdGroupCollapsed = p.gdGroupCollapsed;
     if (typeof p.aiWorkerUrl === "string") state.aiWorkerUrl = p.aiWorkerUrl;
-    if (typeof p.cbEnvId === "string") state.cbEnvId = p.cbEnvId;
+    if (typeof p.cfWorkerUrl === "string") state.cfWorkerUrl = p.cfWorkerUrl;
+    if (typeof p.cfSecret === "string") state.cfSecret = p.cfSecret;
     // 兼容旧版一次性迁移：如果还留有旧 Worker 配置但新版未配置，则迁移时丢弃（Worker 已不可用）
   } catch (_) {}
 }
@@ -356,7 +357,8 @@ function savePrefs() {
     activeSectionId: state.activeSectionId,
     view: state.view,
     aiWorkerUrl: state.aiWorkerUrl,
-    cbEnvId: state.cbEnvId,
+    cfWorkerUrl: state.cfWorkerUrl,
+    cfSecret: state.cfSecret,
   }));
 }
 
@@ -365,17 +367,17 @@ async function init() {
   await openDB();
   loadPrefs();
 
-  // 初始化 CloudBase（若已在设置里填好环境 ID 并开启匿名登录）
-  await initCloudBase();
+  // 初始化 Cloudflare 同步（若已在设置里填好 Worker URL + 密钥）
+  await initCloudflare();
 
   // 先以本地 IndexedDB 兜底加载（离线 / file:// 也能用）
   state.sections = await all_("sections");
   state.modules = await all_("modules");
   state.records = await all_("records");
 
-  // CloudBase 已配置 -> 以云端为准（保证上传的文件跨浏览器/设备都在）
-  if (CLOUDBASE) {
-    try { await pullCloudBase(); } catch (_) {}
+  // 已配置云端 -> 以云端为准（保证上传的文件跨浏览器/设备都在）
+  if (CLOUDFLARE) {
+    try { await pullCloudflare(); } catch (_) {}
   }
 
   if (state.sections.length === 0) {
@@ -1569,11 +1571,16 @@ function openSettings() {
         <button class="modal-close">×</button>
       </div>
       <div class="form-body">
-        <div class="field-group-title">☁️ 云端同步（CloudBase，免部署）</div>
+        <div class="field-group-title">☁️ 云端同步（Cloudflare Workers + R2，免费）</div>
         <div class="field">
-          <label>CloudBase 环境 ID</label>
-          <input type="text" id="s_cb_env" value="${esc(state.cbEnvId)}" placeholder="填入 CloudBase 控制台的环境 ID" />
-          <div class="hint">在腾讯云 CloudBase 创建环境后，复制「环境 → 环境 ID」。需开启「匿名登录」并把数据集合 kitty_vault 设为「所有用户可读写」。微信 / Chrome 填同一个环境 ID，即共享同一份数据。详见 DEPLOY_CLOUDBASE.md。</div>
+          <label>Worker URL</label>
+          <input type="text" id="s_cf_url" value="${esc(state.cfWorkerUrl)}" placeholder="https://kitty-vault-sync.xxx.workers.dev" />
+          <div class="hint">在 Cloudflare 部署 worker/worker.js（详见 DEPLOY_CLOUDFLARE.md）后得到的 Worker 地址。微信 / Chrome 填同一个 URL + 密钥，即共享同一份数据。</div>
+        </div>
+        <div class="field">
+          <label>同步密钥（Secret）</label>
+          <input type="password" id="s_cf_key" value="${esc(state.cfSecret)}" placeholder="与 Worker 变量 VAULT_KEY 一致" />
+          <div class="hint">部署 Worker 时设置的 VAULT_KEY。相当于访问密码，两边填一致即可。详见 DEPLOY_CLOUDFLARE.md。</div>
         </div>
 
         <div class="field-group-title">✨ AI 智能概括（选填）</div>
@@ -1603,28 +1610,30 @@ function openSettings() {
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
   $(".btn-cancel", overlay).onclick = () => overlay.remove();
   $(".btn-save", overlay).onclick = async () => {
-    state.cbEnvId = $("#s_cb_env", overlay).value.trim();
+    state.cfWorkerUrl = $("#s_cf_url", overlay).value.trim();
+    state.cfSecret = $("#s_cf_key", overlay).value.trim();
     state.doubaoApiKey = $("#s_apikey", overlay).value.trim();
     state.doubaoModel = $("#s_model", overlay).value.trim();
     state.aiWorkerUrl = $("#s_worker", overlay).value.trim();
     savePrefs();
-    await initCloudBase();
-    if (CLOUDBASE) {
-      try { await pullCloudBase(); renderSidebar(); renderMain(); toast("已连接云端并开始同步"); }
-      catch (e) { toast("连接云端失败：" + ((e && e.message) || "请检查环境 ID")); }
-    } else if (state.cbEnvId) {
-      toast("连接云端失败：" + (_cbLastError || "请检查环境 ID，并确认已开启匿名登录"));
+    await initCloudflare();
+    if (CLOUDFLARE) {
+      try { await pullCloudflare(); renderSidebar(); renderMain(); toast("已连接云端并开始同步"); }
+      catch (e) { toast("连接云端失败：" + ((e && e.message) || "请检查 Worker URL / 密钥")); }
+    } else if (state.cfWorkerUrl || state.cfSecret) {
+      toast("连接云端失败：" + (_cfLastError || "请检查 Worker URL 与密钥"));
     } else {
       toast("设置已保存（未配置云端同步）");
     }
     overlay.remove();
   };
   $(".btn-sync", overlay).onclick = async () => {
-    state.cbEnvId = $("#s_cb_env", overlay).value.trim();
+    state.cfWorkerUrl = $("#s_cf_url", overlay).value.trim();
+    state.cfSecret = $("#s_cf_key", overlay).value.trim();
     savePrefs();
-    await initCloudBase();
-    if (!CLOUDBASE) { toast("连接云端失败：" + (_cbLastError || "请检查环境 ID，并确认已开启匿名登录")); return; }
-    await pullCloudBase();
+    await initCloudflare();
+    if (!CLOUDFLARE) { toast("连接云端失败：" + (_cfLastError || "请检查 Worker URL 与密钥")); return; }
+    await pullCloudflare();
     await doSync();
     renderSidebar();
     renderMain();
