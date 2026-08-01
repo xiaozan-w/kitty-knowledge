@@ -1,8 +1,0 @@
-name = "kitty-knowledge-ai"
-main = "src/index.js"
-compatibility_date = "2024-09-23"
-
-# 以下为「非机密」配置；真正保密的 AI_API_KEY 请用 secret（见指南）
-[vars]
-AI_BASE_URL = "https://api.deepseek.com/v1"
-AI_MODEL = "deepseek-chat"

@@ -104,39 +104,12 @@ async function extractImageText(blob) {
     return data.text || "";
   } finally { URL.revokeObjectURL(url); }
 }
-/* 联网 AI 解析：调用 Cloudflare Worker 代理（Key 存于 Worker 环境变量，不暴露前端）
-   返回 { summary, tags } 或 null（失败/未配置） */
-async function aiWorkerParse(text) {
-  if (!state.aiWorkerUrl) return null;
-  try {
-    const r = await fetch(state.aiWorkerUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: text.slice(0, 12000) }),
-    });
-    if (!r.ok) throw new Error("Worker " + r.status);
-    const j = await r.json();
-    if (j.error) throw new Error(j.error);
-    const tags = Array.isArray(j.tags) ? j.tags : (typeof j.tags === "string" ? j.tags.split(/[,，\s]+/).filter(Boolean) : []);
-    return { summary: (j.summary || "").trim(), tags };
-  } catch (e) {
-    console.warn("联网 AI 调用失败，回退本地：", e);
-    return null;
-  }
-}
-
+/* 本地 AI 解析：纯前端摘要 + 关键词，不上传任何内容 */
 async function analyzeBlob(blob, fileType) {
   let text = "", pageCount = null;
   if (fileType === "pdf") { const r = await extractPdfText(blob); text = r.text; pageCount = r.pageCount; }
   else if (fileType === "text") text = await blob.text();
   else if (fileType === "image") text = await extractImageText(blob);
-  // 优先：联网 AI（Cloudflare Worker 免费代理，可选）
-  if (text.length > 50) {
-    const ai = await aiWorkerParse(text);
-    if (ai && ai.summary) {
-      return { summary: ai.summary, keywords: ai.tags.length ? ai.tags : topKeywords(ai.summary, 6), stats: { chars: text.length, sentences: 0, pageCount } };
-    }
-  }
   const sum = summarizeText(text);
   sum.stats.pageCount = pageCount;
   return sum;
@@ -161,12 +134,12 @@ function openDB() {
 const store = (name, mode) => db.transaction(name, mode).objectStore(name);
 const put_ = (name, v) => new Promise((res, rej) => {
   const r = store(name, "readwrite").put(v);
-  r.onsuccess = () => { scheduleSync(); res(v); };
+  r.onsuccess = () => { res(v); };
   r.onerror = () => rej(r.error);
 });
 const del_ = (name, id) => new Promise((res, rej) => {
   const r = store(name, "readwrite").delete(id);
-  r.onsuccess = () => { scheduleSync(); res(); };
+  r.onsuccess = () => { res(); };
   r.onerror = () => rej(r.error);
 });
 const all_ = (name) => new Promise((res, rej) => {
@@ -177,138 +150,6 @@ const get_ = (name, id) => new Promise((res, rej) => {
   const r = store(name, "readonly").get(id);
   r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
 });
-
-/* ---------- Cloudflare Workers + KV 云端同步（免服务器、免绑卡、免费） ----------
- * 浏览器 IndexedDB 仍是本地兜底；当在「⚙️ 同步设置」填好 Worker URL 和共享密钥后，
- * 任意一次写入都会在 800ms 后同步到 Cloudflare 上的 Worker（数据存于 Workers KV 命名空间）。
- * 关键：附件不塞进同步 JSON（会撞体积上限），而是每个附件单独上传到 KV（/file/{id}），
- * 云端 JSON 只保留引用 —— 这样整库文字再大也只是一个很小的 JSON。微信 / Chrome 等任意
- * 浏览器打开同一网址、填同一个 Worker URL + 密钥，看到的都是同一份数据。未配置时回退本地。
- * 后端代码见 worker/worker.js（部署到 Cloudflare Workers，免费额度够个人长期用；KV 单值上限 25MB）。 */
-let CLOUDFLARE = false;
-let _cfTimer = null;
-let _cfLastError = "";
-function cfReady() { return !!state.cfWorkerUrl && !!state.cfSecret; }
-async function initCloudflare() {
-  // 无状态：只要填了 URL + 密钥即视为可用，真正鉴权在首次请求时由 Worker 校验
-  CLOUDFLARE = cfReady();
-  _cfLastError = "";
-}
-function scheduleSync() {
-  if (!CLOUDFLARE) return;
-  clearTimeout(_cfTimer);
-  _cfTimer = setTimeout(doSync, 800);
-}
-async function cfPut(path, body, isBlob) {
-  const base = state.cfWorkerUrl.replace(/\/$/, "");
-  const u = base + path + (path.includes("?") ? "&" : "?") + "key=" + encodeURIComponent(state.cfSecret);
-  const ctrl = new AbortController();
-  const _t = setTimeout(() => ctrl.abort(), 8000);
-  const opts = { method: "PUT", headers: { "X-Vault-Key": state.cfSecret }, signal: ctrl.signal };
-  if (isBlob) {
-    opts.body = body;
-    if (body && body.type) opts.headers["Content-Type"] = body.type;
-  } else {
-    opts.body = typeof body === "string" ? body : JSON.stringify(body);
-    opts.headers["Content-Type"] = "application/json";
-  }
-  try {
-    const resp = await fetch(u, opts);
-    if (!resp.ok) {
-      const txt = await resp.text().catch(() => "");
-      throw new Error("HTTP " + resp.status + " " + txt);
-    }
-    return resp;
-  } catch (e) {
-    if (e.name === "AbortError") throw new Error("同步超时（8 秒），请检查网络或 Worker URL");
-    throw e;
-  } finally {
-    clearTimeout(_t);
-  }
-}
-async function doSync() {
-  if (!CLOUDFLARE) return;
-  try {
-    // 1) 附件单独上传到 KV（/file/{id}），JSON 只留引用
-    let skippedBig = false;
-    for (const r of state.records) {
-      if (r.blob && !r._cfFileUrl) {
-        if ((r.blob.size || 0) > 24 * 1024 * 1024) { skippedBig = true; continue; }
-        try {
-          const ext = (r._blobType || r.blob.type || "bin").split("/").pop().split("+")[0] || "bin";
-          const safeExt = /^[a-z0-9]+$/i.test(ext) ? ext : "bin";
-          const fileId = `${r.id}-${Date.now()}.${safeExt}`;
-          await cfPut(`/file/${encodeURIComponent(fileId)}`, r.blob, true);
-          r._cfFileUrl = fileId;
-        } catch (e) {
-          console.error("附件上传失败", r.id, e);
-        }
-      }
-    }
-    // 2) 只写文字 + 附件引用（绝不把 base64 塞进 JSON）
-    const payload = {
-      app: "pkWorkbench", version: 1, exportedAt: Date.now(),
-      sections: state.sections,
-      modules: state.modules,
-      records: state.records.map((rec) => {
-        const { blob, ...rest } = rec;
-        return { ...rest, _blobType: blob ? blob.type : (rest._blobType || null) };
-      }),
-    };
-    await cfPut("/sync", payload, false);
-    _cfLastError = "";
-    if (skippedBig) toast("提示：个别超大附件（>24MB）未同步，文字已同步（可压缩后重传）");
-  } catch (e) {
-    _cfLastError = (e && (e.message || String(e))) || "未知错误";
-    console.error("Cloudflare push failed", e);
-  }
-}
-async function pullCloudflare() {
-  if (!CLOUDFLARE) return;
-  try {
-    const base = state.cfWorkerUrl.replace(/\/$/, "");
-    const u = base + "/sync?key=" + encodeURIComponent(state.cfSecret);
-    const ctrl = new AbortController();
-    const _t = setTimeout(() => ctrl.abort(), 8000);
-    let resp;
-    try {
-      resp = await fetch(u, { headers: { "X-Vault-Key": state.cfSecret }, signal: ctrl.signal });
-    } catch (e) {
-      clearTimeout(_t);
-      if (e.name === "AbortError") throw new Error("同步超时（8 秒），请检查网络或 Worker URL");
-      throw e;
-    }
-    clearTimeout(_t);
-    if (!resp.ok) throw new Error("HTTP " + resp.status);
-    const payload = await resp.json();
-    if (!payload || (!payload.sections && !payload.records)) return;
-    // 保留本机已有 blob，避免重复下载
-    const localBlobs = new Map(state.records.filter((r) => r.blob).map((r) => [r.id, r.blob]));
-    const recs = await Promise.all((payload.records || []).map(async (r) => {
-      const out = { ...r };
-      if (!out.blob && r._cfFileUrl) {
-        try {
-          const fu = base + "/file/" + encodeURIComponent(r._cfFileUrl) + "?key=" + encodeURIComponent(state.cfSecret);
-          const fr = await fetch(fu, { headers: { "X-Vault-Key": state.cfSecret } });
-          if (fr.ok) out.blob = await fr.blob();
-        } catch (_) {}
-      }
-      if (!out.blob && localBlobs.has(r.id)) out.blob = localBlobs.get(r.id);
-      return out;
-    }));
-    state.sections = payload.sections || [];
-    state.modules = payload.modules || [];
-    state.records = recs;
-    _cfLastError = "";
-    await persistToIDB();
-    toast("已从云端同步");
-  } catch (e) {
-    _cfLastError = (e && (e.message || String(e))) || "未知错误";
-    console.error("Cloudflare pull failed", e);
-    toast("云端拉取失败：" + _cfLastError);
-  }
-}
-
 
 async function persistToIDB() {
   for (const n of ["sections", "modules", "records"]) {
@@ -341,12 +182,7 @@ const PRESETS = [
   globalCollapsed: false,
   gdGroupCollapsed: {},   // 全局目录分组折叠态
   searchQuery: "",
-  doubaoApiKey: "",       // 豆包 API Key（从 config 获取）
-  doubaoModel: "",        // 豆包模型 ID
   timeFilter: "all",      // 时间筛选：all | 7d | 30d | year
-  aiWorkerUrl: "",         // 联网 AI 代理（Cloudflare Worker 地址，选填）
-  cfWorkerUrl: "",         // Cloudflare Worker URL（云端同步用）
-  cfSecret: "",            // Cloudflare 同步共享密钥（与 Worker 的 VAULT_KEY 一致）
 };
 
 /* UI 偏好持久化（不存知识内容，仅界面状态） */
@@ -360,10 +196,6 @@ function loadPrefs() {
     if (typeof p.activeSectionId === "string") state.activeSectionId = p.activeSectionId;
     if (p.view === "splash" || p.view === "home" || p.view === "section" || p.view === "trash") state.view = p.view;
     if (p.gdGroupCollapsed) state.gdGroupCollapsed = p.gdGroupCollapsed;
-    if (typeof p.aiWorkerUrl === "string") state.aiWorkerUrl = p.aiWorkerUrl;
-    if (typeof p.cfWorkerUrl === "string") state.cfWorkerUrl = p.cfWorkerUrl;
-    if (typeof p.cfSecret === "string") state.cfSecret = p.cfSecret;
-    // 兼容旧版一次性迁移：如果还留有旧 Worker 配置但新版未配置，则迁移时丢弃（Worker 已不可用）
   } catch (_) {}
 }
 function savePrefs() {
@@ -375,9 +207,6 @@ function savePrefs() {
     gdGroupCollapsed: state.gdGroupCollapsed,
     activeSectionId: state.activeSectionId,
     view: state.view,
-    aiWorkerUrl: state.aiWorkerUrl,
-    cfWorkerUrl: state.cfWorkerUrl,
-    cfSecret: state.cfSecret,
   }));
 }
 
@@ -387,10 +216,7 @@ async function init() {
   try { await openDB(); } catch (e) { console.warn("IndexedDB 打开失败：", e); }
   try { loadPrefs(); } catch (e) { console.warn("读取偏好失败：", e); }
 
-  // 2. 初始化 Cloudflare 同步（仅做状态判断，不联网，不阻塞）
-  try { initCloudflare(); } catch (e) { console.warn("Cloudflare 初始化失败：", e); }
-
-  // 3. 先以本地 IndexedDB 兜底加载（离线 / file:// 也能用）
+  // 2. 先以本地 IndexedDB 加载（离线 / file:// 也能用）
   try {
     state.sections = await all_("sections");
     state.modules = await all_("modules");
@@ -400,14 +226,7 @@ async function init() {
     state.sections = []; state.modules = []; state.records = [];
   }
 
-  // 4. 已配置云端 -> 后台拉取（绝对不阻塞首屏渲染）
-  if (CLOUDFLARE) {
-    pullCloudflare()
-      .then(() => { renderSidebar(); renderMain(); })
-      .catch((e) => console.warn("云端拉取失败（不影响本地使用）：", e));
-  }
-
-  // 5. 没有数据时注入预设板块
+  // 3. 没有数据时注入预设板块
   if (state.sections.length === 0) {
     try {
       await seedPresets();
@@ -1193,7 +1012,7 @@ async function openEditor(recId, presetModuleId) {
             <button type="button" id="f_analyze" class="mini-btn">✨ 智能概括</button>
           </div>
           <textarea id="f_summary" placeholder="记录这条知识的核心要点、笔记或心得…（也可点上方按钮自动概括）"></textarea>
-          <div class="hint">上传文件后点「✨ 智能概括」可自动提取文本、调用联网 AI 生成摘要与标签；未配置 AI 代理时自动使用本地提取。</div>
+          <div class="hint">上传文件后点「✨ 智能概括」可自动提取文本并生成摘要与标签（纯本地处理，不上传）。</div>
         </div>
         ${fileType === "text" || !existing ? "" : `<div class="field"><div class="hint">已存在原文件，重新上传可替换；留空则保留原文件。</div></div>`}
       </div>
@@ -1596,86 +1415,31 @@ function runSearch(q) {
   box.classList.remove("hidden");
 }
 
-/* ---------- 豆包设置弹窗 ---------- */
+/* ---------- 本地数据说明弹窗 ---------- */
 function openSettings() {
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.innerHTML = `
-    <div class="modal form-modal" style="max-width:420px">
+    <div class="modal form-modal" style="max-width:440px">
       <div class="modal-head">
         <span class="mh-emoji">⚙️</span>
-        <span class="mh-title">同步与 AI 设置</span>
+        <span class="mh-title">关于数据存储</span>
         <button class="modal-close">×</button>
       </div>
-      <div class="form-body">
-        <div class="field-group-title">☁️ 云端同步（Cloudflare Workers + KV，免绑卡免费）</div>
-        <div class="field">
-          <label>Worker URL</label>
-          <input type="text" id="s_cf_url" value="${esc(state.cfWorkerUrl)}" placeholder="https://kitty-vault-sync.xxx.workers.dev" />
-          <div class="hint">在 Cloudflare 部署 worker/worker.js（详见 DEPLOY_CLOUDFLARE.md）后得到的 Worker 地址。微信 / Chrome 填同一个 URL + 密钥，即共享同一份数据。</div>
-        </div>
-        <div class="field">
-          <label>同步密钥（Secret）</label>
-          <input type="password" id="s_cf_key" value="${esc(state.cfSecret)}" placeholder="与 Worker 变量 VAULT_KEY 一致" />
-          <div class="hint">部署 Worker 时设置的 VAULT_KEY。相当于访问密码，两边填一致即可。详见 DEPLOY_CLOUDFLARE.md。</div>
-        </div>
-
-        <div class="field-group-title">✨ AI 智能概括（选填）</div>
-        <div class="field">
-          <label>豆包（火山引擎）API Key</label>
-          <input type="text" id="s_apikey" value="${esc(state.doubaoApiKey)}" placeholder="填入你的 Doubao API Key（选填，无 Key 时用本地提取）" />
-          <div class="hint">在火山引擎 Ark 平台获取 API Key，填入后「✨ 智能概括」将调用豆包大模型生成更准确的摘要。无 Key 时自动使用本地文本提取。</div>
-        </div>
-        <div class="field">
-          <label>模型 ID（选填）</label>
-          <input type="text" id="s_model" value="${esc(state.doubaoModel)}" placeholder="如 doubao-pro-32k 或你的接入点 ID" />
-        </div>
-        <div class="field">
-          <label>联网 AI 代理地址（Cloudflare Worker URL）</label>
-          <input type="text" id="s_worker" value="${esc(state.aiWorkerUrl)}" placeholder="https://xxxx.xxx.workers.dev/api/ai" />
-          <div class="hint">若你有自己的 AI 代理地址可填这里，否则使用本地文本提取。</div>
-        </div>
+      <div class="form-body" style="line-height:1.9;font-size:14px;color:var(--text)">
+        <p>📱 <b>数据保存在本机</b>：所有板块、记录、附件都存放在当前浏览器的本地数据库（IndexedDB），不上传任何云端服务器。</p>
+        <p>💾 <b>如何备份</b>：点左下角「⤓ 完整备份」可导出包含所有附件的备份文件；「📄 导出文本」导出纯文字版。建议定期导出留底。</p>
+        <p>♻️ <b>如何恢复</b>：点「⤒ 导入」选择备份文件即可还原。</p>
+        <p>⚠️ <b>注意</b>：清除浏览器/微信的缓存或存储空间会删除本地数据，请务必先备份。</p>
       </div>
       <div class="form-footer">
-        <button class="btn-sync">立即同步</button>
-        <button class="btn-cancel">取消</button>
-        <button class="btn-save">保存设置</button>
+        <button class="btn-save">我知道了</button>
       </div>
     </div>`;
   $("#modalRoot").appendChild(overlay);
   $(".modal-close", overlay).onclick = () => overlay.remove();
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
-  $(".btn-cancel", overlay).onclick = () => overlay.remove();
-  $(".btn-save", overlay).onclick = async () => {
-    state.cfWorkerUrl = $("#s_cf_url", overlay).value.trim();
-    state.cfSecret = $("#s_cf_key", overlay).value.trim();
-    state.doubaoApiKey = $("#s_apikey", overlay).value.trim();
-    state.doubaoModel = $("#s_model", overlay).value.trim();
-    state.aiWorkerUrl = $("#s_worker", overlay).value.trim();
-    savePrefs();
-    await initCloudflare();
-    if (CLOUDFLARE) {
-      try { await pullCloudflare(); renderSidebar(); renderMain(); toast("已连接云端并开始同步"); }
-      catch (e) { toast("连接云端失败：" + ((e && e.message) || "请检查 Worker URL / 密钥")); }
-    } else if (state.cfWorkerUrl || state.cfSecret) {
-      toast("连接云端失败：" + (_cfLastError || "请检查 Worker URL 与密钥"));
-    } else {
-      toast("设置已保存（未配置云端同步）");
-    }
-    overlay.remove();
-  };
-  $(".btn-sync", overlay).onclick = async () => {
-    state.cfWorkerUrl = $("#s_cf_url", overlay).value.trim();
-    state.cfSecret = $("#s_cf_key", overlay).value.trim();
-    savePrefs();
-    await initCloudflare();
-    if (!CLOUDFLARE) { toast("连接云端失败：" + (_cfLastError || "请检查 Worker URL 与密钥")); return; }
-    await pullCloudflare();
-    await doSync();
-    renderSidebar();
-    renderMain();
-    toast("已与云端双向同步");
-  };
+  $(".btn-save", overlay).onclick = () => overlay.remove();
 }
 
 /* ============================================================
@@ -1698,7 +1462,7 @@ function bindGlobalEvents() {
   $("#importBtn").onclick = () => $("#importFile").click();
   $("#offlineBtn").onclick = downloadOffline;
   $("#settingsBtn").onclick = openSettings;
-  // 豆包设置
+
   $("#settingsBtn").onclick = openSettings;
   $("#importFile").onchange = (e) => {
     const f = e.target.files[0];

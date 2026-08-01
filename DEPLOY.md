@@ -10,8 +10,6 @@ kitty-knowledge/
 ├── styles.css              # 粉色 Hello Kitty 主题完整样式
 ├── app.js                  # 完整应用逻辑（原始源码）
 ├── index.standalone.html   # 离线单文件版（原始源码）
-├── server.js               # Node.js 后端（本地使用，GitHub Pages 不需要）
-├── start.sh                # 本地启动脚本
 ├── manifest.json            # PWA 清单
 ├── sw.js                    # Service Worker（离线缓存）
 ├── .nojekyll                # 禁用 GitHub Pages Jekyll
@@ -26,7 +24,7 @@ kitty-knowledge/
 - ✅ IndexedDB 本地存储（支持 PDF/图片 Blob 文件）
 - ✅ PDF 在线预览（pdf.js）
 - ✅ 图片 OCR 文字识别（Tesseract.js）
-- ✅ 豆包 AI 智能概括（可选，需 API Key）
+- ✅ 智能概括（本地文本提取，自动生成摘要与标签）
 - ✅ 拖拽排序（板块、模块）
 - ✅ 最近删除回收站（7天恢复）
 - ✅ 星标收藏 + 跨记录关联
@@ -36,8 +34,8 @@ kitty-knowledge/
 - ✅ PWA 支持（可安装到手机桌面）
 
 ### 部署到 GitHub Pages 后的变化：
-- 数据存储：IndexedDB（浏览器本地）—— 原来的后端存储不可用，但 IndexedDB 完全够用
-- AI 概括：豆包 AI 代理不可用，但本地文本提取概括仍然可用
+- 数据存储：IndexedDB（浏览器本地，纯前端，无需后端服务器）
+- AI 概括：本地文本提取，自动生成摘要与标签
 - 离线版下载：仍然可用（index.standalone.html 已包含在部署中）
 
 ---
@@ -109,12 +107,10 @@ git push -u origin main
 - 换一个浏览器/电脑需要重新导入备份
 - 跨域名的数据不会自动同步
 
-### 想在本地使用完整后端版？
-```bash
-cd "D:\WorkBuddy\2026-07-30-13-22-07\kitty-knowledge"
-bash start.sh
-```
-这会启动 Node.js 服务器，支持服务端文件持久化。
+### 数据只存在本机，如何换设备 / 备份？
+- 应用设计为**纯本地存储**（IndexedDB），不依赖任何后端服务器，也不上传云端，隐私最安全
+- 换设备 / 重装：在旧设备点「⤓ 完整备份」导出 JSON（含附件），到新设备点「⤒ 导入」选该文件即可还原
+- 注意：清除浏览器或微信的缓存/存储空间会删除本地数据，请务必定期「完整备份」
 
 ### 想换成自己的域名？
 - 仓库根目录新建 `CNAME` 文件，写入你的域名（如 `kitty.example.com`）

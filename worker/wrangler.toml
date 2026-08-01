@@ -1,9 +1,0 @@
-name = "kitty-vault-sync"
-main = "worker.js"
-compatibility_date = "2024-09-23"
-
-# 绑定一个 KV 命名空间（在 Cloudflare 控制台先创建 KV namespace，把 ID 填到这里）
-# 用 Dashboard 部署时也可不填此文件，直接在 Worker 设置里绑定变量名 KV
-[[kv_namespaces]]
-binding = "KV"
-id = "在此填写你的 KV namespace ID"

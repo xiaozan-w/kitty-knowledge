@@ -33,19 +33,14 @@
 
 ## 💻 本地使用
 
-### 纯前端模式（推荐快速使用）
+### 纯前端模式（推荐，无需任何后端）
 ```bash
 cd kitty-knowledge
 python -m http.server 8765
 # 访问 http://localhost:8765
 ```
 
-### 完整后端模式（支持服务端文件持久化）
-```bash
-cd kitty-knowledge
-bash start.sh
-# 访问 http://localhost:8000
-```
+> 应用为纯前端 + 浏览器本地存储（IndexedDB），不依赖任何后端服务器。
 
 ## 📁 文件结构
 
@@ -55,8 +50,6 @@ kitty-knowledge/
 ├── styles.css              # Hello Kitty 粉色主题完整样式
 ├── app.js                  # 完整应用逻辑（IndexedDB + CRUD + 搜索 + 导入导出）
 ├── index.standalone.html   # 离线单文件版
-├── server.js               # Node.js 后端（可选，本地使用）
-├── start.sh                # 本地启动脚本
 ├── manifest.json            # PWA 清单
 ├── sw.js                    # Service Worker（离线缓存）
 ├── .nojekyll                # 禁用 GitHub Pages Jekyll
@@ -67,9 +60,9 @@ kitty-knowledge/
 ## 🛠 技术栈
 
 - **前端**：纯 HTML/CSS/JS（无框架，原生实现）
-- **数据存储**：IndexedDB（浏览器本地）+ 可选 Node.js 后端
+- **数据存储**：IndexedDB（浏览器本地，纯前端无后端）
 - **PDF 预览**：pdf.js
 - **图片 OCR**：Tesseract.js
-- **AI 概括**：本地文本提取 + 可选豆包 AI
+- **AI 概括**：本地文本提取（自动生成摘要与标签）
 - **PWA**：manifest.json + Service Worker
 - **部署**：GitHub Pages + GitHub Actions

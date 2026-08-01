@@ -737,7 +737,7 @@ body::before {
         <button id="exportTextBtn" class="footer-btn">📄 导出文本</button>
         <button id="importBtn" class="footer-btn">⤒ 导入</button>
         <button id="offlineBtn" class="footer-btn offline-btn">⬇️ 离线版</button>
-        <button id="settingsBtn" class="footer-btn settings-btn">⚙️ AI 设置</button>
+        <button id="settingsBtn" class="footer-btn settings-btn">⚙️ 设置</button>
         <input type="file" id="importFile" accept=".json,.md,.txt,.markdown,application/json,text/markdown,text/plain" class="hidden" />
       </div>
     </aside>
@@ -878,22 +878,6 @@ async function analyzeBlob(blob, fileType) {
   if (fileType === "pdf") { const r = await extractPdfText(blob); text = r.text; pageCount = r.pageCount; }
   else if (fileType === "text") text = await blob.text();
   else if (fileType === "image") text = await extractImageText(blob);
-  // 尝试豆包 AI 概括（有 API Key 且后端可用时优先）
-  if (BACKEND && state.doubaoApiKey && text.length > 50) {
-    try {
-      const aiResult = await apiPost("/api/ai/doubao", {
-        apiKey: state.doubaoApiKey,
-        model: state.doubaoModel || "doubao-pro-32k",
-        prompt: text.slice(0, 8000),
-      });
-      const ai = await aiResult.json();
-      const reply = ai.summary || "";
-      if (reply) {
-        const sum = { summary: reply, keywords: topKeywords(reply, 6), stats: { chars: text.length, sentences: 0, pageCount } };
-        return sum;
-      }
-    } catch (_) { /* 豆包调用失败，回退到本地 */ }
-  }
   const sum = summarizeText(text);
   sum.stats.pageCount = pageCount;
   return sum;
@@ -918,12 +902,12 @@ function openDB() {
 const store = (name, mode) => db.transaction(name, mode).objectStore(name);
 const put_ = (name, v) => new Promise((res, rej) => {
   const r = store(name, "readwrite").put(v);
-  r.onsuccess = () => { if (BACKEND) scheduleSync(); res(v); };
+  r.onsuccess = () => { res(v); };
   r.onerror = () => rej(r.error);
 });
 const del_ = (name, id) => new Promise((res, rej) => {
   const r = store(name, "readwrite").delete(id);
-  r.onsuccess = () => { if (BACKEND) scheduleSync(); res(); };
+  r.onsuccess = () => { res(); };
   r.onerror = () => rej(r.error);
 });
 const all_ = (name) => new Promise((res, rej) => {
@@ -935,39 +919,6 @@ const get_ = (name, id) => new Promise((res, rej) => {
   r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
 });
 
-/* ---------- 服务端持久化（在带后端的预览地址运行时自动启用） ----------
- * 思路：浏览器 IndexedDB 仍是本地兜底；当检测到 /api/vault 可用时，
- * 任何一次写入都会把「板块/模块/记录（含上传文件的 base64）」整体同步到
- * 服务器磁盘（/workspace/data/vault.json），从而实现「上传的文件真正被保存」。
- * 离线 / file:// 打开的单文件版则继续只走 IndexedDB。 */
-let BACKEND = false;
-let _syncTimer = null;
-async function apiGet(p) { const r = await fetch(p); if (!r.ok) throw new Error("HTTP " + r.status); return r; }
-async function apiPost(p, obj) {
-  const r = await fetch(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  return r;
-}
-function scheduleSync() {
-  if (!BACKEND) return;
-  clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(doSync, 600);
-}
-async function doSync() {
-  try {
-    const payload = {
-      app: "pkWorkbench", version: 1, exportedAt: Date.now(),
-      sections: state.sections,
-      modules: state.modules,
-      records: await Promise.all(state.records.map(async (r) => ({
-        ...r,
-        blob: r.blob ? await blobToB64(r.blob) : null,
-        _blobType: r.blob ? r.blob.type : null,
-      }))),
-    };
-    await apiPost("/api/vault", payload);
-  } catch (_) { /* 离线时静默，下次变更再试 */ }
-}
 function decodeRec(r) {
   if (r && r.blob && r._blobType !== undefined) {
     try { r.blob = b64ToBlob(r.blob, r._blobType); } catch (_) { r.blob = null; }
@@ -1005,8 +956,6 @@ const PRESETS = [
   globalCollapsed: false,
   gdGroupCollapsed: {},   // 全局目录分组折叠态
   searchQuery: "",
-  doubaoApiKey: "",       // 豆包 API Key（从 config 获取）
-  doubaoModel: "",        // 豆包模型 ID
 };
 
 /* UI 偏好持久化（不存知识内容，仅界面状态） */
@@ -1039,30 +988,10 @@ async function init() {
   await openDB();
   loadPrefs();
 
-  // 探测后端：能拿到 /api/vault 说明运行在带持久化的预览地址上
-  let serverVault = null;
-  if (location.protocol === "file:") {
-    BACKEND = false;                       // 单文件离线版不连后端，只用本地库
-  } else {
-    try { const r = await apiGet("/api/vault"); serverVault = await r.json(); BACKEND = true; }
-    catch (_) { BACKEND = false; }
-  }
-
   // 先以本地 IndexedDB 兜底加载（离线 / file:// 也能用）
   state.sections = await all_("sections");
   state.modules = await all_("modules");
   state.records = await all_("records");
-
-  // 后端可用且已有数据 -> 以服务端为准（保证上传的文件跨刷新/设备都在）
-  const serverHas = !!(serverVault && (serverVault.records?.length || serverVault.sections?.length || serverVault.modules?.length));
-  if (BACKEND && serverHas) {
-    state.sections = serverVault.sections || [];
-    state.modules = serverVault.modules || [];
-    state.records = (serverVault.records || []).map(decodeRec);
-    await persistToIDB();            // 把服务端数据镜像到本地，作为离线兜底
-  } else if (BACKEND && !serverHas && (state.records.length || state.sections.length || state.modules.length)) {
-    scheduleSync();                  // 本地已有数据，推送到服务端留存
-  }
 
   if (state.sections.length === 0) {
     await seedPresets();
@@ -1076,10 +1005,6 @@ async function init() {
   bindGlobalEvents();
   renderSidebar();
   renderMain();
-  // 加载豆包配置
-  if (BACKEND) {
-    try { const cfg = await (await apiGet("/api/config")).json(); state.doubaoApiKey = cfg.doubao_api_key || ""; state.doubaoModel = cfg.doubao_model || ""; } catch (_) {}
-  }
   // 7 天自动清理 + 定时
   purgeExpired();
   setInterval(purgeExpired, 3600000);
@@ -2176,46 +2101,31 @@ function runSearch(q) {
   box.classList.remove("hidden");
 }
 
-/* ---------- 豆包设置弹窗 ---------- */
+/* ---------- 本地数据说明弹窗 ---------- */
 function openSettings() {
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.innerHTML = `
-    <div class="modal form-modal" style="max-width:420px">
+    <div class="modal form-modal" style="max-width:440px">
       <div class="modal-head">
         <span class="mh-emoji">⚙️</span>
-        <span class="mh-title">AI 智能概括设置</span>
+        <span class="mh-title">关于数据存储</span>
         <button class="modal-close">×</button>
       </div>
-      <div class="form-body">
-        <div class="field">
-          <label>豆包（火山引擎）API Key</label>
-          <input type="text" id="s_apikey" value="${esc(state.doubaoApiKey)}" placeholder="填入你的 Doubao API Key（选填，无 Key 时用本地提取）" />
-          <div class="hint">在火山引擎 Ark 平台获取 API Key，填入后「✨ 智能概括」将调用豆包大模型生成更准确的摘要。无 Key 时自动使用本地文本提取。</div>
-        </div>
-        <div class="field">
-          <label>模型 ID（选填）</label>
-          <input type="text" id="s_model" value="${esc(state.doubaoModel)}" placeholder="如 doubao-pro-32k 或你的接入点 ID" />
-        </div>
+      <div class="form-body" style="line-height:1.9;font-size:14px;color:var(--text)">
+        <p>📱 <b>数据保存在本机</b>：所有板块、记录、附件都存放在当前浏览器的本地数据库（IndexedDB），不上传任何云端服务器。</p>
+        <p>💾 <b>如何备份</b>：点左下角「⤓ 完整备份」可导出包含所有附件的备份文件；「📄 导出文本」导出纯文字版。建议定期导出留底。</p>
+        <p>♻️ <b>如何恢复</b>：点「⤒ 导入」选择备份文件即可还原。</p>
+        <p>⚠️ <b>注意</b>：清除浏览器/微信的缓存或存储空间会删除本地数据，请务必先备份。</p>
       </div>
       <div class="form-footer">
-        <button class="btn-cancel">取消</button>
-        <button class="btn-save">保存设置</button>
+        <button class="btn-save">我知道了</button>
       </div>
     </div>`;
   $("#modalRoot").appendChild(overlay);
   $(".modal-close", overlay).onclick = () => overlay.remove();
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
-  $(".btn-cancel", overlay).onclick = () => overlay.remove();
-  $(".btn-save", overlay).onclick = async () => {
-    state.doubaoApiKey = $("#s_apikey", overlay).value.trim();
-    state.doubaoModel = $("#s_model", overlay).value.trim();
-    if (BACKEND) {
-      try { await apiPost("/api/config", { doubao_api_key: state.doubaoApiKey, doubao_model: state.doubaoModel }); } catch (_) {}
-    }
-    overlay.remove();
-    toast("设置已保存");
-  };
+  $(".btn-save", overlay).onclick = () => overlay.remove();
 }
 
 /* ============================================================
@@ -2236,7 +2146,7 @@ function bindGlobalEvents() {
   $("#importBtn").onclick = () => $("#importFile").click();
   $("#offlineBtn").onclick = downloadOffline;
   $("#settingsBtn").onclick = openSettings;
-  // 豆包设置
+
   $("#settingsBtn").onclick = openSettings;
   $("#importFile").onchange = (e) => {
     const f = e.target.files[0];
