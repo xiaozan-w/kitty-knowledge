@@ -362,6 +362,21 @@ body::before {
 .dir-row .dr-title { flex: 1; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dir-row .dr-mod { font-size: 11px; color: var(--primary-deep); background: var(--primary-soft); padding: 3px 10px; border-radius: var(--capsule); font-weight: 600; }
 
+/* 大模块首页底部「最近浏览」 */
+.recents-block {
+  margin-top: 26px;
+  background: var(--card);
+  border: 2px solid var(--border-soft);
+  border-radius: 16px;
+  padding: 16px 18px;
+}
+.rb-head {
+  font-size: 15px; font-weight: 700; color: var(--text);
+  margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+}
+.recents-list { margin-bottom: 0; }
+.dir-row .dr-sub { font-size: 11px; color: var(--text-faint); margin-left: 6px; white-space: nowrap; }
+
 /* 二级模块卡片 */
 .module-card {
   margin-top: 18px;

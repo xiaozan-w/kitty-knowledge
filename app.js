@@ -238,6 +238,7 @@ const PRESETS = [
   moduleCollapsed: {},
   globalCollapsed: false,
   gdGroupCollapsed: {},   // 全局目录分组折叠态
+  recentIds: [],          // 最近浏览的记录 id（最近在前，最多 10 条）
   searchQuery: "",
   timeFilter: "all",      // 时间筛选：all | 7d | 30d | year
   doubaoApiKey: "",       // 用户自填的火山方舟 API Key（仅存本机 localStorage，直连模式用）
@@ -255,6 +256,7 @@ function loadPrefs() {
     if (typeof p.activeSectionId === "string") state.activeSectionId = p.activeSectionId;
     if (p.view === "splash" || p.view === "home" || p.view === "section" || p.view === "trash") state.view = p.view;
     if (p.gdGroupCollapsed) state.gdGroupCollapsed = p.gdGroupCollapsed;
+    if (Array.isArray(p.recentIds)) state.recentIds = p.recentIds;
     if (typeof p.doubaoApiKey === "string") state.doubaoApiKey = p.doubaoApiKey;
     if (typeof p.doubaoModel === "string") state.doubaoModel = p.doubaoModel;
   } catch (_) {}
@@ -266,6 +268,7 @@ function savePrefs() {
     moduleCollapsed: state.moduleCollapsed,
     globalCollapsed: state.globalCollapsed,
     gdGroupCollapsed: state.gdGroupCollapsed,
+    recentIds: state.recentIds,
     activeSectionId: state.activeSectionId,
     view: state.view,
     doubaoApiKey: state.doubaoApiKey,
@@ -598,6 +601,7 @@ function renderHome() {
         <div class="home-sub">私人知识收纳 · 点一下进入对应模块</div>
       </div>
       <div class="home-grid">${tiles}</div>
+      <div class="recents-block" id="recentsBlock">${recentsInnerHTML()}</div>
     </div>`;
   $$(".home-tile", content).forEach((t) =>
     t.addEventListener("click", () => {
@@ -608,6 +612,49 @@ function renderHome() {
       renderMain();
     })
   );
+  bindRecentsRows($("#recentsBlock", content));
+}
+
+/* 「最近浏览」：目录形式展示最近点击的 10 条记录，仅在大模块首页底部 */
+function recentsInnerHTML() {
+  if (!state.recentIds.length) {
+    return `<div class="empty-hint" style="padding:14px">还没有浏览记录，点开任意记录就会出现在这里</div>`;
+  }
+  const rows = state.recentIds
+    .map((id) => recordById(id))
+    .filter((r) => r && !r.deleted)
+    .map((r) => {
+      const m = moduleById(r.moduleId);
+      const sec = sectionById(r.sectionId);
+      const sub = [m ? m.name : "", sec ? sec.name : ""].filter(Boolean).join(" · ");
+      return `<div class="dir-row" data-rec="${r.id}"><span class="dr-dot"></span><span class="dr-title">${esc(r.title)}</span>${sub ? `<span class="dr-sub">${esc(sub)}</span>` : ""}</div>`;
+    }).join("");
+  return `<div class="dir-list recents-list">${rows}</div>`;
+}
+
+function bindRecentsRows(box) {
+  if (!box) return;
+  $$(".dir-row", box).forEach((el) => {
+    const rid = el.dataset.rec;
+    bindRecordLongPress(el, rid);   // 与记录卡片一致：长按可进入多选
+    el.addEventListener("click", () => {
+      if (recordSelection.size > 0) { toggleRecordSelection(rid); return; }
+      openRecord(rid);
+    });
+  });
+}
+
+function updateRecents() {
+  const box = $("#recentsBlock");
+  if (!box) return;                // 仅首页可见时就地刷新
+  box.innerHTML = recentsInnerHTML();
+  bindRecentsRows(box);
+}
+
+function markViewed(rid) {
+  state.recentIds = [rid, ...state.recentIds.filter((x) => x !== rid)].slice(0, 10);
+  savePrefs();
+  updateRecents();                 // 若首页「最近浏览」可见则即时更新
 }
 
 function renderMain() {
@@ -1551,6 +1598,7 @@ async function toggleStar(rid) {
 async function openRecord(rid) {
   const rec = recordById(rid);
   if (!rec) return;
+  markViewed(rid);                 // 记入「最近浏览」（去重 + 最多 10 条）
   const sec = sectionById(rec.sectionId);
   const mod = moduleById(rec.moduleId);
 
