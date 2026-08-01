@@ -60,11 +60,11 @@
   <div id="modalRoot"></div>
   <div id="toast" class="toast hidden"></div>
 
-  <script src="app.js?v=24"></script>
+  <script src="app.js?v=25"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function() {
-        navigator.serviceWorker.register('sw.js?v=24').then(function(reg) {
+        navigator.serviceWorker.register('sw.js?v=25').then(function(reg) {
           reg.addEventListener('updatefound', function() {
             var installing = reg.installing;
             installing.addEventListener('statechange', function() {

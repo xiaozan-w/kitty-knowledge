@@ -178,13 +178,13 @@ const get_ = (name, id) => new Promise((res, rej) => {
   r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
 });
 
-/* ---------- Cloudflare Workers + R2 云端同步（免服务器，免费） ----------
+/* ---------- Cloudflare Workers + KV 云端同步（免服务器、免绑卡、免费） ----------
  * 浏览器 IndexedDB 仍是本地兜底；当在「⚙️ 同步设置」填好 Worker URL 和共享密钥后，
- * 任意一次写入都会在 800ms 后同步到 Cloudflare 上的 Worker（数据存于 R2 存储桶）。
- * 关键：附件不塞进同步 JSON（会撞体积上限），而是每个附件单独上传到 R2（/file/{id}），
+ * 任意一次写入都会在 800ms 后同步到 Cloudflare 上的 Worker（数据存于 Workers KV 命名空间）。
+ * 关键：附件不塞进同步 JSON（会撞体积上限），而是每个附件单独上传到 KV（/file/{id}），
  * 云端 JSON 只保留引用 —— 这样整库文字再大也只是一个很小的 JSON。微信 / Chrome 等任意
  * 浏览器打开同一网址、填同一个 Worker URL + 密钥，看到的都是同一份数据。未配置时回退本地。
- * 后端代码见 worker/worker.js（部署到 Cloudflare Workers，免费额度够个人长期用）。 */
+ * 后端代码见 worker/worker.js（部署到 Cloudflare Workers，免费额度够个人长期用；KV 单值上限 25MB）。 */
 let CLOUDFLARE = false;
 let _cfTimer = null;
 let _cfLastError = "";
@@ -220,11 +220,11 @@ async function cfPut(path, body, isBlob) {
 async function doSync() {
   if (!CLOUDFLARE) return;
   try {
-    // 1) 附件单独上传到 R2（/file/{id}），JSON 只留引用
+    // 1) 附件单独上传到 KV（/file/{id}），JSON 只留引用
     let skippedBig = false;
     for (const r of state.records) {
       if (r.blob && !r._cfFileUrl) {
-        if ((r.blob.size || 0) > 100 * 1024 * 1024) { skippedBig = true; continue; }
+        if ((r.blob.size || 0) > 24 * 1024 * 1024) { skippedBig = true; continue; }
         try {
           const ext = (r._blobType || r.blob.type || "bin").split("/").pop().split("+")[0] || "bin";
           const safeExt = /^[a-z0-9]+$/i.test(ext) ? ext : "bin";
@@ -248,7 +248,7 @@ async function doSync() {
     };
     await cfPut("/sync", payload, false);
     _cfLastError = "";
-    if (skippedBig) toast("提示：个别超大附件（>100MB）未同步，文字已同步");
+    if (skippedBig) toast("提示：个别超大附件（>24MB）未同步，文字已同步（可压缩后重传）");
   } catch (e) {
     _cfLastError = (e && (e.message || String(e))) || "未知错误";
     console.error("Cloudflare push failed", e);
@@ -1571,7 +1571,7 @@ function openSettings() {
         <button class="modal-close">×</button>
       </div>
       <div class="form-body">
-        <div class="field-group-title">☁️ 云端同步（Cloudflare Workers + R2，免费）</div>
+        <div class="field-group-title">☁️ 云端同步（Cloudflare Workers + KV，免绑卡免费）</div>
         <div class="field">
           <label>Worker URL</label>
           <input type="text" id="s_cf_url" value="${esc(state.cfWorkerUrl)}" placeholder="https://kitty-vault-sync.xxx.workers.dev" />
