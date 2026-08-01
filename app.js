@@ -278,6 +278,8 @@ async function init() {
   // 1. 打开本地数据库（失败则后续只能跑在内存模式，尽量不影响界面）
   try { await openDB(); } catch (e) { console.warn("IndexedDB 打开失败：", e); }
   try { loadPrefs(); } catch (e) { console.warn("读取偏好失败：", e); }
+  // 每次刷新都从「小琦的 Hello Kitty 星球」首页进入，不记忆上次停留的视图
+  state.view = "splash";
 
   // 2. 先以本地 IndexedDB 加载（离线 / file:// 也能用）
   try {
@@ -689,29 +691,30 @@ function panelHTML({ id, icon, title, count, collapsed, body }) {
 
 function globalDirBody(recs, secId) {
   if (recs.length === 0) return `<div class="empty-hint"><span class="eh-emoji">🔍</span>暂无记录，去子模块里添加吧</div>`;
-  // 按子模块分组，每组可折叠
+  // 按小模块顺序排列分组（遵循侧栏小模块的排列顺序）；组内记录仍按 sortRecords 排序
   const mods = modulesOf(secId);
-  const groups = {};
+  const byMod = {};
   const unclassified = [];
-  for (const r of sortRecords(recs)) {
+  for (const r of recs) {
     const m = moduleById(r.moduleId);
-    if (m) { if (!groups[m.id]) groups[m.id] = { name: m.name, records: [] }; groups[m.id].records.push(r); }
+    if (m) { (byMod[m.id] = byMod[m.id] || []).push(r); }
     else unclassified.push(r);
   }
   let html = "";
-  for (const mid in groups) {
-    const g = groups[mid];
-    const collapsed = state.gdGroupCollapsed?.[mid];
+  for (const m of mods) {
+    const grp = byMod[m.id];
+    if (!grp || grp.length === 0) continue;
+    const collapsed = state.gdGroupCollapsed?.[m.id];
     html += `<div class="gd-group${collapsed ? " collapsed" : ""}">
-      <div class="gd-group-head" data-gdg="${esc(mid)}"><span>📑 ${esc(g.name)}</span><span>${g.records.length} 条</span><span class="ph-caret">▾</span></div>
-      <div class="gd-group-body">${g.records.map((r) => `<div class="dir-row" data-rec="${r.id}"><span class="dr-dot"></span><span class="dr-title">${esc(r.title)}</span></div>`).join("")}</div>
+      <div class="gd-group-head" data-gdg="${esc(m.id)}"><span>${esc(m.icon || "📑")} ${esc(m.name)}</span><span>${grp.length} 条</span><span class="ph-caret">▾</span></div>
+      <div class="gd-group-body">${sortRecords(grp).map((r) => `<div class="dir-row" data-rec="${r.id}"><span class="dr-dot"></span><span class="dr-title">${esc(r.title)}</span></div>`).join("")}</div>
     </div>`;
   }
   if (unclassified.length) {
     const collapsed = state.gdGroupCollapsed?.["__unclassified"];
     html += `<div class="gd-group${collapsed ? " collapsed" : ""}">
       <div class="gd-group-head" data-gdg="__unclassified"><span>📁 未归类</span><span>${unclassified.length} 条</span><span class="ph-caret">▾</span></div>
-      <div class="gd-group-body">${unclassified.map((r) => `<div class="dir-row" data-rec="${r.id}"><span class="dr-dot"></span><span class="dr-title">${esc(r.title)}</span></div>`).join("")}</div>
+      <div class="gd-group-body">${sortRecords(unclassified).map((r) => `<div class="dir-row" data-rec="${r.id}"><span class="dr-dot"></span><span class="dr-title">${esc(r.title)}</span></div>`).join("")}</div>
     </div>`;
   }
   return html;
