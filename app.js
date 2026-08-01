@@ -239,6 +239,8 @@ async function init() {
   }
 
   // 6. 渲染界面 + 绑定事件（即使某一步报错也要尽量继续）
+  // 移动端默认收起抽屉（避免桌面端展开的偏好盖住页面）；只在初始化时做一次，绝不打断用户点击「☰」展开
+  if (window.innerWidth <= 820) state.sidebarHidden = true;
   try { applySidebar(); } catch (e) { console.warn("应用侧边栏状态失败：", e); }
   try { bindGlobalEvents(); } catch (e) { console.warn("绑定全局事件失败：", e); }
   try { renderSidebar(); } catch (e) { console.warn("渲染侧边栏失败：", e); }
@@ -292,11 +294,8 @@ function applyTimeFilter(recs) {
    侧边栏
    ============================================================ */
 function applySidebar() {
-  // 移动端（窄屏）默认强制收起侧边栏抽屉，避免从桌面端带过来的展开状态遮挡页面
-  if (window.innerWidth <= 820 && !state.sidebarHidden) {
-    state.sidebarHidden = true;
-    savePrefs();
-  }
+  // 仅根据当前 state.sidebarHidden 渲染，绝不在本函数内改写它，
+  // 否则点击「☰」展开时会被立刻重新收起（移动端侧栏打不开的根因）。
   const sb = $("#sidebar");
   if (window.innerWidth > 820) sb.style.width = state.sidebarWidth + "px"; // 仅桌面端用内联宽度，移动端交给 CSS 媒体查询
   sb.classList.toggle("collapsed", state.sidebarHidden);
@@ -1492,6 +1491,18 @@ function bindGlobalEvents() {
     if (!e.target.closest(".search-wrap")) $("#searchResults").classList.add("hidden");
   });
   si.addEventListener("keydown", (e) => { if (e.key === "Escape") { si.value = ""; $("#searchResults").classList.add("hidden"); } });
+
+  // 视口在桌面/移动端之间跨越 820px 边界时，同步抽屉默认状态。
+  // 仅判断「是否跨边界」，避免移动端滚动导致 innerHeight 变化而误触发收起。
+  let _lastMobile = window.innerWidth <= 820;
+  window.addEventListener("resize", () => {
+    const isMobile = window.innerWidth <= 820;
+    if (isMobile !== _lastMobile) {
+      if (isMobile) state.sidebarHidden = true; // 进入移动端：收起抽屉
+      applySidebar();
+      _lastMobile = isMobile;
+    }
+  });
 }
 
 /* 启动 */
