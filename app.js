@@ -198,10 +198,7 @@ async function initCloudBase() {
   try {
     _cbApp = cloudbase.init({ env: state.cbEnvId });
     const auth = _cbApp.auth({ persistence: "local" });
-    const loginState = await auth.getLoginState();
-    if (!loginState) {
-      await auth.anonymousAuthProvider().signIn();
-    }
+    await auth.signInAnonymously();
     _cbLastError = "";
     CLOUDBASE = true;
   } catch (e) {
@@ -228,7 +225,7 @@ async function doSync() {
           const ext = (r._blobType || r.blob.type || "bin").split("/").pop().split("+")[0] || "bin";
           const safeExt = /^[a-z0-9]+$/i.test(ext) ? ext : "bin";
           const cloudPath = `kitty/${r.id}-${Date.now()}.${safeExt}`;
-          const res = await _cbApp.storage().uploadFile({ cloudPath, fileContent: r.blob });
+          const res = await _cbApp.uploadFile({ cloudPath, filePath: r.blob });
           r._cbFileUrl = res.fileID;
         } catch (e) {
           console.error("附件上传失败", r.id, e);
@@ -272,7 +269,7 @@ async function pullCloudBase() {
       const out = { ...r };
       if (!out.blob && r._cbFileUrl) {
         try {
-          const tmp = await _cbApp.storage().getTempFileURL({ fileList: [r._cbFileUrl] });
+          const tmp = await _cbApp.getTempFileURL({ fileList: [r._cbFileUrl] });
           const url = tmp.fileList && tmp.fileList[0] && tmp.fileList[0].tempFileURL;
           if (url) {
             const resp = await fetch(url);
