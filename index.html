@@ -14,7 +14,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="碎知识Kitty" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=34" />
+  <link rel="stylesheet" href="styles.css?v=35" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
@@ -58,13 +58,21 @@
   </div>
 
   <div id="modalRoot"></div>
+  <div id="batchBar" class="batch-bar hidden">
+    <div class="bb-info">已选 <span id="bbCount">0</span> 条 · 长按记录可多选</div>
+    <div class="bb-actions">
+      <button id="bbMove" class="bb-btn">📦 移动</button>
+      <button id="bbDelete" class="bb-btn bb-danger">🗑 删除</button>
+      <button id="bbCancel" class="bb-btn bb-ghost">取消</button>
+    </div>
+  </div>
   <div id="toast" class="toast hidden"></div>
 
-  <script src="app.js?v=34"></script>
+  <script src="app.js?v=35"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function() {
-        navigator.serviceWorker.register('sw.js?v=34').then(function(reg) {
+        navigator.serviceWorker.register('sw.js?v=35').then(function(reg) {
           reg.addEventListener('updatefound', function() {
             var installing = reg.installing;
             installing.addEventListener('statechange', function() {

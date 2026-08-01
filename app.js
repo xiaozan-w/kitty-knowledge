@@ -557,6 +557,7 @@ function renderHome() {
 }
 
 function renderMain() {
+  recordSelection.clear(); hideBatchBar();
   // 顶部工具栏只在内容页（板块/回收站）显示；首页/闪屏隐藏，保持干净
   $("#mainHeader").classList.toggle("hidden", state.view === "splash" || state.view === "home");
   if (state.view === "splash") { renderSplash(); return; }
@@ -632,10 +633,19 @@ function renderMain() {
     });
     bindModuleDnD(h, h.dataset.mod);
   });
-  // 目录/卡片点击 → 弹窗
-  $$("[data-rec]", content).forEach((el) =>
-    el.addEventListener("click", () => openRecord(el.dataset.rec))
-  );
+  // 目录/卡片点击 → 弹窗；长按进入多选模式
+  $$("[data-rec]", content).forEach((el) => {
+    const rid = el.dataset.rec;
+    bindRecordLongPress(el, rid);
+    el.addEventListener("click", (e) => {
+      if (recordSelection.size > 0) {
+        e.preventDefault(); e.stopPropagation();
+        toggleRecordSelection(rid);
+        return;
+      }
+      openRecord(rid);
+    });
+  });
   // 星标收藏（阻止冒泡，避免触发弹窗）
   $$("[data-star]", content).forEach((b) =>
     b.addEventListener("click", (e) => { e.stopPropagation(); toggleStar(b.dataset.star); })
@@ -746,6 +756,7 @@ function recordCardHTML(r) {
   const relMark = r.relations && r.relations.length ? `<span class="rc-rel" title="已关联 ${r.relations.length} 条">🔗</span>` : "";
   return `
   <div class="record-card" data-rec="${r.id}">
+    <span class="rc-check">✓</span>
     ${relMark}
     <span class="rc-star${r.starred ? " on" : ""}" data-star="${r.id}" title="${r.starred ? "取消收藏" : "收藏"}">${r.starred ? "★" : "☆"}</span>
     <div class="rc-type">${tm.icon}</div>
@@ -1307,6 +1318,122 @@ function purgeExpired() {
 }
 
 /* ============================================================
+   记录多选模式（长按进入；可批量删除 / 跨模块移动）
+   ============================================================ */
+let recordSelection = new Set();   // 选中的记录 id 集合（临时 UI 状态，不持久化）
+
+function markRecordSelected(rid, on) {
+  $$(`[data-rec="${rid}"]`).forEach((el) => el.classList.toggle("selected", on));
+}
+function enterRecordSelection(rid) {
+  if (recordSelection.has(rid)) return;
+  recordSelection.add(rid);
+  markRecordSelected(rid, true);
+  showBatchBar();
+}
+function toggleRecordSelection(rid) {
+  if (recordSelection.has(rid)) { recordSelection.delete(rid); markRecordSelected(rid, false); }
+  else { recordSelection.add(rid); markRecordSelected(rid, true); }
+  if (recordSelection.size === 0) exitRecordSelection();
+  else updateBatchBar();
+}
+function exitRecordSelection() {
+  recordSelection.forEach((rid) => markRecordSelected(rid, false));
+  recordSelection.clear();
+  hideBatchBar();
+}
+function showBatchBar() { const b = $("#batchBar"); if (b) { b.classList.remove("hidden"); updateBatchBar(); } }
+function hideBatchBar() { const b = $("#batchBar"); if (b) b.classList.add("hidden"); }
+function updateBatchBar() { const c = $("#bbCount"); if (c) c.textContent = recordSelection.size; }
+
+function bindRecordLongPress(el, rid) {
+  let timer = null, triggered = false;
+  const start = (e) => {
+    if (e.type === "pointerdown" && e.button !== 0) return;
+    triggered = false;
+    timer = setTimeout(() => {
+      triggered = true;
+      el.classList.add("long-pressing");
+      if (navigator.vibrate) navigator.vibrate(40);
+      enterRecordSelection(rid);
+      setTimeout(() => el.classList.remove("long-pressing"), 200);
+    }, 550);
+  };
+  const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  el.addEventListener("pointerdown", start);
+  el.addEventListener("pointermove", clear);
+  el.addEventListener("pointerup", clear);
+  el.addEventListener("pointerleave", clear);
+  el.addEventListener("pointercancel", clear);
+  // 长按触发的点击需被吞掉，避免紧接着打开记录弹窗
+  el.addEventListener("click", (e) => { if (triggered) { e.preventDefault(); e.stopPropagation(); triggered = false; } }, true);
+}
+
+async function deleteSelectedRecords() {
+  const ids = [...recordSelection];
+  if (!ids.length) return;
+  if (!confirm(`确定删除选中的 ${ids.length} 条记录？将移入最近删除，7 天内可恢复。`)) return;
+  for (const rid of ids) {
+    const rec = recordById(rid);
+    if (!rec || rec.deleted) continue;
+    rec.deleted = true; rec.deletedAt = Date.now();
+    await put_("records", rec);
+    state.records = state.records.map((x) => (x.id === rid ? rec : x));
+  }
+  // 同步清理被删记录的关联关系
+  for (const r of state.records) {
+    const keep = (r.relations || []).filter((x) => !ids.includes(x));
+    if (keep.length !== (r.relations || []).length) { r.relations = keep; await put_("records", r); }
+  }
+  exitRecordSelection();
+  renderSidebar(); renderMain();
+  toast(`已移入最近删除 ${ids.length} 条`);
+}
+
+function openModulePicker(onPick) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  let groups = "";
+  for (const s of state.sections) {
+    const mods = modulesOf(s.id);
+    if (!mods.length) continue;
+    groups += `<div class="mv-sec">${esc(s.icon || "📁")} ${esc(s.name)}</div>`;
+    for (const m of mods) {
+      groups += `<button class="mv-opt" data-mid="${m.id}"><span class="mv-ic">${esc(m.icon || "📑")}</span> ${esc(m.name)}</button>`;
+    }
+  }
+  overlay.innerHTML = `<div class="modal form-modal" style="max-width:460px">
+    <div class="modal-head"><span class="mh-emoji">📦</span><span class="mh-title">移动到哪个子模块</span><button class="modal-close">×</button></div>
+    <div class="form-body" style="max-height:62vh;overflow:auto;padding:6px 0">${groups || '<div class="empty-hint">还没有其它子模块</div>'}</div>
+    <div class="form-footer"><button class="btn-cancel">取消</button></div>
+  </div>`;
+  $("#modalRoot").appendChild(overlay);
+  $(".modal-close", overlay).onclick = () => overlay.remove();
+  $(".btn-cancel", overlay).onclick = () => overlay.remove();
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  $$(".mv-opt", overlay).forEach((b) => b.onclick = () => { overlay.remove(); onPick(b.dataset.mid); });
+}
+
+async function moveSelectedRecords() {
+  const ids = [...recordSelection];
+  if (!ids.length) return;
+  openModulePicker(async (mid) => {
+    const target = moduleById(mid);
+    if (!target) return;
+    for (const rid of ids) {
+      const rec = recordById(rid);
+      if (!rec || rec.deleted) continue;
+      rec.moduleId = mid; rec.sectionId = target.sectionId; rec.updatedAt = Date.now();
+      await put_("records", rec);
+      state.records = state.records.map((x) => (x.id === rid ? rec : x));
+    }
+    exitRecordSelection();
+    renderSidebar(); renderMain();
+    toast(`已移动 ${ids.length} 条到「${target.name}」`);
+  });
+}
+
+/* ============================================================
    最近删除视图
    ============================================================ */
 function renderTrash() {
@@ -1603,6 +1730,11 @@ function bindGlobalEvents() {
   $("#addSectionBtn").onclick = addSection;
   $("#addModuleBtn").onclick = openAddModule;
   $("#addRecordBtn").onclick = () => openEditor(null, null);
+
+  // 记录多选模式：底部批量栏按钮
+  $("#bbCancel").onclick = exitRecordSelection;
+  $("#bbDelete").onclick = deleteSelectedRecords;
+  $("#bbMove").onclick = moveSelectedRecords;
 
   // 导入 / 导出备份
   $("#exportBtn").onclick = exportData;

@@ -806,3 +806,48 @@ body::before {
   opacity: 0.08; z-index: 0; pointer-events: none;
   font-size: 60px;
 }
+
+/* ===================== 记录多选模式（长按进入，批量删除/跨模块移动） ===================== */
+.record-card { position: relative; }
+.record-card .rc-check {
+  position: absolute; top: 10px; left: 10px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--primary); color: #fff; font-size: 13px; line-height: 20px; text-align: center;
+  display: none; z-index: 3; box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+.record-card.selected { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+.record-card.selected .rc-check { display: block; }
+.record-card.selected .rc-star { opacity: 0.35; }
+.record-card.long-pressing { transform: scale(0.97); transition: transform 0.08s; }
+
+.dir-row { transition: background 0.12s; }
+.dir-row.selected { background: var(--primary-soft); color: var(--primary-deep); font-weight: 600; border-radius: 8px; }
+.dir-row.selected .dr-dot { background: var(--primary); }
+.dir-row.long-pressing { transform: scale(0.98); }
+
+.long-pressing { transition: transform 0.08s; }
+
+.batch-bar {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(87,78,78,0.96); color: #fff;
+  padding: 10px 14px; border-radius: 50px;
+  box-shadow: var(--shadow); z-index: 70; max-width: 94vw;
+}
+.batch-bar .bb-info { font-size: 13px; opacity: 0.92; white-space: nowrap; }
+.batch-bar .bb-actions { display: flex; gap: 8px; }
+.bb-btn { border: none; cursor: pointer; padding: 8px 14px; border-radius: 50px; font-size: 13px; font-weight: 600; transition: transform 0.12s, opacity 0.12s; }
+.bb-btn:active { transform: scale(0.95); }
+.bb-btn.bb-danger { background: #e0736f; color: #fff; }
+.bb-btn.bb-ghost { background: rgba(255,255,255,0.18); color: #fff; }
+.bb-btn:not(.bb-danger):not(.bb-ghost) { background: var(--kitty-yellow); color: #5a4a2a; }
+
+/* 跨模块移动：目标子模块选择器 */
+.mv-sec { font-size: 12px; color: var(--text-faint); padding: 12px 16px 4px; font-weight: 600; }
+.mv-opt {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  text-align: left; padding: 11px 16px; border: none; background: transparent;
+  cursor: pointer; font-size: 14px; color: var(--text); border-radius: 10px;
+}
+.mv-opt:hover { background: var(--bg-soft); }
+.mv-ic { font-size: 17px; }
