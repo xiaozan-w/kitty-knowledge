@@ -216,7 +216,7 @@ async function doSync() {
     let skippedBig = false;
     for (const r of state.records) {
       if (r.blob && !r._cbFileUrl) {
-        if ((r.blob.size || 0) > 15 * 1024 * 1024) { skippedBig = true; continue; }
+        if ((r.blob.size || 0) > 100 * 1024 * 1024) { skippedBig = true; continue; }
         try {
           const ext = (r._blobType || r.blob.type || "bin").split("/").pop().split("+")[0] || "bin";
           const safeExt = /^[a-z0-9]+$/i.test(ext) ? ext : "bin";
@@ -246,7 +246,7 @@ async function doSync() {
     } else {
       await coll.doc(existing.data[0]._id).set({ data: payload, updatedAt: Date.now() });
     }
-    if (skippedBig) toast("提示：个别超大附件（>15MB）未同步，文字已同步");
+    if (skippedBig) toast("提示：个别超大附件（>100MB）未同步，文字已同步");
   } catch (e) {
     console.error("CloudBase push failed", e);
   }
