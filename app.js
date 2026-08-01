@@ -298,7 +298,7 @@ function applySidebar() {
     savePrefs();
   }
   const sb = $("#sidebar");
-  sb.style.width = state.sidebarWidth + "px";
+  if (window.innerWidth > 820) sb.style.width = state.sidebarWidth + "px"; // 仅桌面端用内联宽度，移动端交给 CSS 媒体查询
   sb.classList.toggle("collapsed", state.sidebarHidden);
   $("#showSidebar").classList.toggle("hidden", !state.sidebarHidden);
   $("#resizeHandle").classList.toggle("hidden", state.sidebarHidden);
