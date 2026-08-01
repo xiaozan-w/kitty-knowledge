@@ -192,11 +192,11 @@ let _cbTimer = null;
 let _cbLastError = "";
 const CB_COLL = "kitty_vault";
 const CB_SLOT = "main";
-function cbReady() { return typeof tcb !== "undefined" && !!state.cbEnvId; }
+function cbReady() { return typeof cloudbase !== "undefined" && !!state.cbEnvId; }
 async function initCloudBase() {
   if (!cbReady()) { CLOUDBASE = false; return; }
   try {
-    _tcbApp = tcb.init({ env: state.cbEnvId });
+    _tcbApp = cloudbase.init({ env: state.cbEnvId });
     await _tcbApp.auth().signInAnonymously();
     _cbLastError = "";
     CLOUDBASE = true;
