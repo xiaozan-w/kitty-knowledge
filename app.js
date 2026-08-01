@@ -437,61 +437,61 @@ function reorderSections(fromId, toId, after) {
 }
 
 /* 板块长按删除 */
-function bindSectionLongPress(item, sid) {
-  let timer = null;
-  let moved = false;
-  let triggered = false;
-  const start = (e) => {
-    // 只有主键（左键或触摸）才触发
-    if (e.type === "pointerdown" && e.button !== 0) return;
-    moved = false; triggered = false;
-    timer = setTimeout(() => {
-      triggered = true;
-      item.classList.add("long-pressing");
-      if (navigator.vibrate) navigator.vibrate(40);
-      const s = sectionById(sid);
-      openItemActionMenu({ title: s ? s.name : "板块", onRename: () => renameSection(sid), onDelete: () => deleteSection(sid) });
-      setTimeout(() => item.classList.remove("long-pressing"), 200);
-    }, 600);
+/* 通用长按：带移动阈值（过滤手指抖动）+ 拦截原生右键/选择菜单，桌面与移动端通用 */
+function attachLongPress(el, onTrigger, opts = {}) {
+  let timer = null, pid = null, sx = 0, sy = 0, triggered = false;
+  const THRESH = 12;                  // 移动超过该像素才算「滚动」，否则视为停留（防手指抖动误取消）
+  const DUR = opts.duration || 550;   // 触发时长
+  const fire = () => {
+    if (triggered) return;
+    triggered = true;
+    el.classList.add("long-pressing");
+    if (navigator.vibrate) navigator.vibrate(40);
+    onTrigger();
+    setTimeout(() => el.classList.remove("long-pressing"), 200);
   };
-  const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
-  item.addEventListener("pointerdown", start);
-  item.addEventListener("pointermove", () => { moved = true; clear(); });
-  item.addEventListener("pointerup", clear);
-  item.addEventListener("pointerleave", clear);
-  item.addEventListener("pointercancel", clear);
-  item.addEventListener("click", (e) => {
+  const onDown = (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return; // 鼠标仅左键
+    if (opts.ignoreSelector && e.target.closest(opts.ignoreSelector)) return; // 操作按钮等不触发
+    pid = e.pointerId; sx = e.clientX; sy = e.clientY; triggered = false;
+    clearTimeout(timer);
+    timer = setTimeout(fire, DUR);
+  };
+  const onMove = (e) => {
+    if (pid === null) return;
+    if (Math.abs(e.clientX - sx) > THRESH || Math.abs(e.clientY - sy) > THRESH) {
+      clearTimeout(timer); timer = null;
+    }
+  };
+  const onUp = () => { clearTimeout(timer); timer = null; };
+  const onClick = (e) => {
     if (triggered) { e.preventDefault(); e.stopPropagation(); triggered = false; }
+  };
+  const onCtx = (e) => { e.preventDefault(); fire(); return false; }; // 移动端长按原生菜单 → 改为我们的菜单
+  el.addEventListener("pointerdown", onDown);
+  el.addEventListener("pointermove", onMove);
+  el.addEventListener("pointerup", onUp);
+  el.addEventListener("pointercancel", onUp);
+  el.addEventListener("pointerleave", onUp);
+  el.addEventListener("click", onClick, true);      // 捕获阶段：先于其它点击处理
+  el.addEventListener("contextmenu", onCtx);         // 桌面右键 / 移动端长按系统菜单
+}
+
+function bindSectionLongPress(item, sid) {
+  attachLongPress(item, () => {
+    const s = sectionById(sid);
+    openItemActionMenu({ title: s ? s.name : "板块", onRename: () => renameSection(sid), onDelete: () => deleteSection(sid) });
   });
 }
 
 /* 子模块长按：弹出「重命名 / 删除」菜单（与板块长按一致） */
 let moduleClickSuppressUntil = 0;
 function bindModuleLongPress(head, mid) {
-  let timer = null, triggered = false;
-  const start = (e) => {
-    if (e.type === "pointerdown" && e.button !== 0) return;
-    if (e.target.closest(".mh-actions")) return; // 操作按钮有自身点击
-    triggered = false;
-    timer = setTimeout(() => {
-      triggered = true;
-      head.classList.add("long-pressing");
-      if (navigator.vibrate) navigator.vibrate(40);
-      moduleClickSuppressUntil = Date.now() + 800; // 抑制长按后的释放点击误触折叠
-      const m = moduleById(mid);
-      openItemActionMenu({ title: m ? m.name : "子模块", onRename: () => renameModule(mid), onDelete: () => deleteModule(mid) });
-      setTimeout(() => head.classList.remove("long-pressing"), 200);
-    }, 600);
-  };
-  const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
-  head.addEventListener("pointerdown", start);
-  head.addEventListener("pointermove", () => clear());
-  head.addEventListener("pointerup", clear);
-  head.addEventListener("pointerleave", clear);
-  head.addEventListener("pointercancel", clear);
-  head.addEventListener("click", (e) => {
-    if (triggered) { e.preventDefault(); triggered = false; }
-  });
+  attachLongPress(head, () => {
+    moduleClickSuppressUntil = Date.now() + 800;   // 抑制长按后的释放点击误触折叠
+    const m = moduleById(mid);
+    openItemActionMenu({ title: m ? m.name : "子模块", onRename: () => renameModule(mid), onDelete: () => deleteModule(mid) });
+  }, { ignoreSelector: ".mh-actions" });
 }
 
 /* 长按菜单：重命名 / 删除（板块与子模块共用） */
@@ -1430,26 +1430,7 @@ function hideBatchBar() { const b = $("#batchBar"); if (b) b.classList.add("hidd
 function updateBatchBar() { const c = $("#bbCount"); if (c) c.textContent = recordSelection.size; }
 
 function bindRecordLongPress(el, rid) {
-  let timer = null, triggered = false;
-  const start = (e) => {
-    if (e.type === "pointerdown" && e.button !== 0) return;
-    triggered = false;
-    timer = setTimeout(() => {
-      triggered = true;
-      el.classList.add("long-pressing");
-      if (navigator.vibrate) navigator.vibrate(40);
-      enterRecordSelection(rid);
-      setTimeout(() => el.classList.remove("long-pressing"), 200);
-    }, 550);
-  };
-  const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
-  el.addEventListener("pointerdown", start);
-  el.addEventListener("pointermove", clear);
-  el.addEventListener("pointerup", clear);
-  el.addEventListener("pointerleave", clear);
-  el.addEventListener("pointercancel", clear);
-  // 长按触发的点击需被吞掉，避免紧接着打开记录弹窗
-  el.addEventListener("click", (e) => { if (triggered) { e.preventDefault(); e.stopPropagation(); triggered = false; } }, true);
+  attachLongPress(el, () => enterRecordSelection(rid), { duration: 550 });
 }
 
 async function deleteSelectedRecords() {
