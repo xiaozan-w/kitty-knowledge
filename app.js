@@ -180,10 +180,11 @@ const get_ = (name, id) => new Promise((res, rej) => {
 
 /* ---------- LeanCloud 云端同步（免部署，前端直连） ----------
  * 浏览器 IndexedDB 仍是本地兜底；当在「⚙️ 同步设置」填好 LeanCloud 的
- * App ID / App Key 后，任意一次写入都会在 800ms 后把整份库（板块/模块/
- * 记录，含附件 base64）推送到 LeanCloud 云端。微信 / Chrome 等任意浏览器
- * 打开同一网址、填同一组 App ID/Key，看到的都是同一份数据。
- * 未配置时完全回退本地，不影响使用。 */
+ * App ID / App Key 后，任意一次写入都会在 800ms 后同步到 LeanCloud 云端。
+ * 关键：附件不塞进单一数据对象（会撞 16MB 上限），而是每个附件单独上传为
+ * LeanCloud File（对象存储），云端记录只保留 URL 引用 —— 这样整库文字再大
+ * 也只是一个很小的 JSON，附件积累再多都不怕。微信 / Chrome 等任意浏览器打开
+ * 同一网址、填同一组 App ID/Key，看到的都是同一份数据。未配置时回退本地。 */
 let LEANCLOUD = false;
 let _lcTimer = null;
 let _lcObjectId = null;        // 云端 KittyVault 记录的 objectId
@@ -206,15 +207,36 @@ function scheduleSync() {
 async function doSync() {
   if (!LEANCLOUD) return;
   try {
+    // 每个附件单独上传为 LeanCloud File（对象存储），云端只留 URL 引用，
+    // 这样 Vault 数据对象只含文字，永远不会撞 16MB 单对象上限。
+    let skippedBig = false;
+    for (const r of state.records) {
+      if (r.blob && !r._lcFileUrl) {
+        if ((r.blob.size || 0) > 15 * 1024 * 1024) { skippedBig = true; continue; }
+        try {
+          const ext = (r._blobType || "").split("/")[1] || "bin";
+          const file = new AV.File(`${r.id}.${ext}`, r.blob, r.blob.type);
+          const acl = new AV.ACL();
+          acl.setPublicReadAccess(true);   // 跨浏览器可直接下载
+          acl.setPublicWriteAccess(false);
+          file.setACL(acl);
+          await file.save();
+          r._lcFileUrl = file.url();
+          r._lcFileId = file.id;
+        } catch (e) {
+          console.error("附件上传失败", r.id, e);
+        }
+      }
+    }
+    // 只写文字 + 附件 URL 引用，绝不把 base64 塞进数据对象
     const payload = {
       app: "pkWorkbench", version: 1, exportedAt: Date.now(),
       sections: state.sections,
       modules: state.modules,
-      records: await Promise.all(state.records.map(async (r) => ({
-        ...r,
-        blob: r.blob ? await blobToB64(r.blob) : null,
-        _blobType: r.blob ? r.blob.type : null,
-      }))),
+      records: state.records.map((rec) => {
+        const { blob, ...rest } = rec;
+        return { ...rest, _blobType: blob ? blob.type : (rest._blobType || null) };
+      }),
     };
     const q = new AV.Query(LC_CLASS);
     q.equalTo("slot", LC_SLOT);
@@ -224,11 +246,12 @@ async function doSync() {
     obj.set("updatedAt", Date.now());
     await obj.save();
     _lcObjectId = obj.id;
+    if (skippedBig) toast("提示：个别超大附件（>15MB）未同步，文字已同步");
   } catch (e) {
     console.error("LeanCloud push failed", e);
     const msg = String((e && e.message) || "");
     if (msg.includes("too large") || msg.includes("413") || (e && e.code === 413)) {
-      toast("同步失败：数据超过 LeanCloud 单条 16MB 上限，请删除大附件记录");
+      toast("同步失败：单条数据过大，请删除超大附件记录");
     }
   }
 }
@@ -241,9 +264,22 @@ async function pullLeanCloud() {
     if (!obj) return;
     const payload = obj.get("data");
     if (!payload || (!payload.sections && !payload.records)) return;
+    // 保留本机已有的 blob，避免重复下载
+    const localBlobs = new Map(state.records.filter((r) => r.blob).map((r) => [r.id, r.blob]));
+    const recs = await Promise.all((payload.records || []).map(async (r) => {
+      const out = { ...r };
+      if (!out.blob && r._lcFileUrl) {
+        try {
+          const resp = await fetch(r._lcFileUrl);
+          if (resp.ok) out.blob = await resp.blob();
+        } catch (_) {}
+      }
+      if (!out.blob && localBlobs.has(r.id)) out.blob = localBlobs.get(r.id);
+      return out;
+    }));
     state.sections = payload.sections || [];
     state.modules = payload.modules || [];
-    state.records = (payload.records || []).map(decodeRec);
+    state.records = recs;
     _lcObjectId = obj.id;
     await persistToIDB();
     toast("已从云端同步");
@@ -251,12 +287,6 @@ async function pullLeanCloud() {
     console.error("LeanCloud pull failed", e);
     toast("云端拉取失败：" + ((e && (e.message || e.error)) || "未知错误"));
   }
-}
-function decodeRec(r) {
-  if (r && r.blob && r._blobType !== undefined) {
-    try { r.blob = b64ToBlob(r.blob, r._blobType); } catch (_) { r.blob = null; }
-  }
-  return r;
 }
 
 
