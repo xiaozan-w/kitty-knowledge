@@ -202,7 +202,9 @@ function scheduleSync() {
 async function cfPut(path, body, isBlob) {
   const base = state.cfWorkerUrl.replace(/\/$/, "");
   const u = base + path + (path.includes("?") ? "&" : "?") + "key=" + encodeURIComponent(state.cfSecret);
-  const opts = { method: "PUT", headers: { "X-Vault-Key": state.cfSecret } };
+  const ctrl = new AbortController();
+  const _t = setTimeout(() => ctrl.abort(), 8000);
+  const opts = { method: "PUT", headers: { "X-Vault-Key": state.cfSecret }, signal: ctrl.signal };
   if (isBlob) {
     opts.body = body;
     if (body && body.type) opts.headers["Content-Type"] = body.type;
@@ -210,12 +212,19 @@ async function cfPut(path, body, isBlob) {
     opts.body = typeof body === "string" ? body : JSON.stringify(body);
     opts.headers["Content-Type"] = "application/json";
   }
-  const resp = await fetch(u, opts);
-  if (!resp.ok) {
-    const txt = await resp.text().catch(() => "");
-    throw new Error("HTTP " + resp.status + " " + txt);
+  try {
+    const resp = await fetch(u, opts);
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => "");
+      throw new Error("HTTP " + resp.status + " " + txt);
+    }
+    return resp;
+  } catch (e) {
+    if (e.name === "AbortError") throw new Error("同步超时（8 秒），请检查网络或 Worker URL");
+    throw e;
+  } finally {
+    clearTimeout(_t);
   }
-  return resp;
 }
 async function doSync() {
   if (!CLOUDFLARE) return;
@@ -259,7 +268,17 @@ async function pullCloudflare() {
   try {
     const base = state.cfWorkerUrl.replace(/\/$/, "");
     const u = base + "/sync?key=" + encodeURIComponent(state.cfSecret);
-    const resp = await fetch(u, { headers: { "X-Vault-Key": state.cfSecret } });
+    const ctrl = new AbortController();
+    const _t = setTimeout(() => ctrl.abort(), 8000);
+    let resp;
+    try {
+      resp = await fetch(u, { headers: { "X-Vault-Key": state.cfSecret }, signal: ctrl.signal });
+    } catch (e) {
+      clearTimeout(_t);
+      if (e.name === "AbortError") throw new Error("同步超时（8 秒），请检查网络或 Worker URL");
+      throw e;
+    }
+    clearTimeout(_t);
     if (!resp.ok) throw new Error("HTTP " + resp.status);
     const payload = await resp.json();
     if (!payload || (!payload.sections && !payload.records)) return;
@@ -375,9 +394,11 @@ async function init() {
   state.modules = await all_("modules");
   state.records = await all_("records");
 
-  // 已配置云端 -> 以云端为准（保证上传的文件跨浏览器/设备都在）
+  // 已配置云端 -> 后台拉取（不阻塞首屏渲染；拉取成功后再刷新界面）
   if (CLOUDFLARE) {
-    try { await pullCloudflare(); } catch (_) {}
+    pullCloudflare()
+      .then(() => { renderSidebar(); renderMain(); })
+      .catch((e) => console.warn("云端拉取失败（不影响本地使用）：", e));
   }
 
   if (state.sections.length === 0) {
