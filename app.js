@@ -198,7 +198,10 @@ async function initCloudBase() {
   try {
     _cbApp = cloudbase.init({ env: state.cbEnvId });
     const auth = _cbApp.auth({ persistence: "local" });
-    await auth.signInAnonymously();
+    const loginState = await auth.getLoginState();
+    if (!loginState) {
+      await auth.anonymousAuthProvider().signIn();
+    }
     _cbLastError = "";
     CLOUDBASE = true;
   } catch (e) {
