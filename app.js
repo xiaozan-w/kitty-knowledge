@@ -387,6 +387,7 @@ function renderSidebar() {
       renderSidebar(); renderMain();
     };
     bindSectionDnD(item, s.id);
+    bindSectionLongPress(item, s.id);
     list.appendChild(item);
   }
   // 最近删除
@@ -432,6 +433,34 @@ function reorderSections(fromId, toId, after) {
   secs.splice(after ? idx + 1 : idx, 0, from);
   secs.forEach((s, i) => { s.order = i; put_("sections", s); });
   renderSidebar();
+}
+
+/* 板块长按删除 */
+function bindSectionLongPress(item, sid) {
+  let timer = null;
+  let moved = false;
+  let triggered = false;
+  const start = (e) => {
+    // 只有主键（左键或触摸）才触发
+    if (e.type === "pointerdown" && e.button !== 0) return;
+    moved = false; triggered = false;
+    timer = setTimeout(() => {
+      triggered = true;
+      item.classList.add("long-pressing");
+      if (navigator.vibrate) navigator.vibrate(40);
+      deleteSection(sid);
+      setTimeout(() => item.classList.remove("long-pressing"), 200);
+    }, 600);
+  };
+  const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  item.addEventListener("pointerdown", start);
+  item.addEventListener("pointermove", () => { moved = true; clear(); });
+  item.addEventListener("pointerup", clear);
+  item.addEventListener("pointerleave", clear);
+  item.addEventListener("pointercancel", clear);
+  item.addEventListener("click", (e) => {
+    if (triggered) { e.preventDefault(); e.stopPropagation(); triggered = false; }
+  });
 }
 
 /* 模块拖拽排序（仅限同板块内） */
@@ -528,6 +557,8 @@ function renderHome() {
 }
 
 function renderMain() {
+  // 顶部工具栏只在内容页（板块/回收站）显示；首页/闪屏隐藏，保持干净
+  $("#mainHeader").classList.toggle("hidden", state.view === "splash" || state.view === "home");
   if (state.view === "splash") { renderSplash(); return; }
   if (state.view === "home") { renderHome(); return; }
   if (state.view === "trash") { renderTrash(); return; }
@@ -663,14 +694,14 @@ function globalDirBody(recs, secId) {
     const collapsed = state.gdGroupCollapsed?.[mid];
     html += `<div class="gd-group${collapsed ? " collapsed" : ""}">
       <div class="gd-group-head" data-gdg="${esc(mid)}"><span>📑 ${esc(g.name)}</span><span>${g.records.length} 条</span><span class="ph-caret">▾</span></div>
-      <div class="gd-group-body">${g.records.slice(0, 10).map((r) => `<div class="dir-row" data-rec="${r.id}"><span class="dr-dot"></span><span class="dr-title">${esc(r.title)}</span></div>`).join("")}</div>
+      <div class="gd-group-body">${g.records.map((r) => `<div class="dir-row" data-rec="${r.id}"><span class="dr-dot"></span><span class="dr-title">${esc(r.title)}</span></div>`).join("")}</div>
     </div>`;
   }
   if (unclassified.length) {
     const collapsed = state.gdGroupCollapsed?.["__unclassified"];
     html += `<div class="gd-group${collapsed ? " collapsed" : ""}">
       <div class="gd-group-head" data-gdg="__unclassified"><span>📁 未归类</span><span>${unclassified.length} 条</span><span class="ph-caret">▾</span></div>
-      <div class="gd-group-body">${unclassified.slice(0, 10).map((r) => `<div class="dir-row" data-rec="${r.id}"><span class="dr-dot"></span><span class="dr-title">${esc(r.title)}</span></div>`).join("")}</div>
+      <div class="gd-group-body">${unclassified.map((r) => `<div class="dir-row" data-rec="${r.id}"><span class="dr-dot"></span><span class="dr-title">${esc(r.title)}</span></div>`).join("")}</div>
     </div>`;
   }
   return html;
@@ -680,7 +711,6 @@ function moduleCardHTML(m, recs) {
   const collapsed = !!state.moduleCollapsed[m.id];
   const localDir = recs.length
     ? `<div class="dir-list">${sortRecords(recs)
-        .slice(0, 10)
         .map((r) => `<div class="dir-row" data-rec="${r.id}"><span class="dr-dot"></span><span class="dr-title">${esc(r.title)}</span></div>`)
         .join("")}</div>`
     : `<div class="empty-hint" style="padding:16px">该子模块还没有记录</div>`;
@@ -693,7 +723,7 @@ function moduleCardHTML(m, recs) {
   <div class="module-card${collapsed ? " collapsed" : ""}">
     <div class="module-head" data-mod="${m.id}" draggable="true">
       <span class="mh-grip" title="拖拽排序">⠿</span>
-      <span class="mh-icon">📑</span>
+      <span class="mh-icon">${esc(m.icon || "📑")}</span>
       <span class="mh-title">${esc(m.name)}</span>
       <span class="mh-count">${recs.length}</span>
       <span class="mh-actions">
@@ -958,10 +988,45 @@ async function importText(md) {
   toast(`已从文本导入 ${recs.length} 条记录`);
 }
 
+const ICON_OPTIONS = ["📁", "📚", "📝", "💡", "⭐", "🏷️", "🗂️", "📂", "🖼️", "🎬", "🔗", "💼", "🏠", "🍳", "🚗", "👗", "⚖️", "⚡", "🌸", "🎀", "🐱", "🌿", "🔥", "❤️", "✅", "📌", "🔒", "🔍", "📊", "🎓", "🧠", "🛠️", "🎨", "🎵", "✈️", "🎁"];
+
+function pickIcon(defaultIcon = "📁") {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.innerHTML = `
+      <div class="modal form-modal" style="max-width:420px">
+        <div class="modal-head">
+          <span class="mh-emoji">🎨</span>
+          <span class="mh-title">选择图标</span>
+          <button class="modal-close">×</button>
+        </div>
+        <div class="form-body">
+          <div class="icon-grid">
+            ${ICON_OPTIONS.map((ico) => `<button class="icon-option${ico === defaultIcon ? " selected" : ""}" data-icon="${ico}">${ico}</button>`).join("")}
+          </div>
+        </div>
+        <div class="form-footer">
+          <button class="btn-cancel">取消</button>
+          <button class="btn-save">使用默认</button>
+        </div>
+      </div>`;
+    $("#modalRoot").appendChild(overlay);
+    const close = (val) => { overlay.remove(); resolve(val); };
+    $(".modal-close", overlay).onclick = () => close(defaultIcon);
+    $(".btn-cancel", overlay).onclick = () => close(defaultIcon);
+    $(".btn-save", overlay).onclick = () => close(defaultIcon);
+    overlay.onclick = (e) => { if (e.target === overlay) close(defaultIcon); };
+    $$(".icon-option", overlay).forEach((btn) =>
+      btn.onclick = () => close(btn.dataset.icon)
+    );
+  });
+}
+
 async function addSection() {
   const name = prompt("新一级板块名称：", "新板块");
   if (!name) return;
-  const icon = prompt("板块图标（emoji，可留空用默认）：", "📁") || "📁";
+  const icon = await pickIcon("📁");
   const order = state.sections.length;
   const s = { id: uid("sec"), name: name.trim(), icon: icon.trim(), order, custom: true, updatedAt: Date.now() };
   await put_("sections", s);
@@ -977,8 +1042,9 @@ async function openAddModule() {
   if (!sec) return;
   const name = prompt("在「" + sec.name + "」下新增子模块名称：");
   if (!name) return;
+  const icon = await pickIcon("📑");
   const order = modulesOf(sec.id).length;
-  const m = { id: uid("mod"), sectionId: sec.id, name: name.trim(), order, custom: true, updatedAt: Date.now() };
+  const m = { id: uid("mod"), sectionId: sec.id, name: name.trim(), icon: icon.trim() || "📑", order, custom: true, updatedAt: Date.now() };
   await put_("modules", m);
   state.modules.push(m);
   savePrefs();

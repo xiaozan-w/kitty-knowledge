@@ -130,6 +130,13 @@ body::before {
 }
 
 .section-item.dragging { opacity: 0.4; }
+.section-item.long-pressing { transform: scale(0.96); background: var(--primary-soft); transition: transform 0.1s, background 0.1s; }
+
+/* 图标选择器 */
+.icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 8px; padding: 4px 0; }
+.icon-option { width: 100%; aspect-ratio: 1; font-size: 22px; border: 2px solid var(--border); border-radius: var(--radius); background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.1s, border-color 0.15s, background 0.15s; }
+.icon-option:hover { transform: scale(1.08); border-color: var(--primary); }
+.icon-option.selected { border-color: var(--primary); background: var(--primary-soft); }
 .section-item.drop-before::before,
 .section-item.drop-after::after {
   content: ""; position: absolute; left: 12px; right: 12px; height: 2px;
@@ -348,8 +355,8 @@ body::before {
 .ch-timefilter:focus { border-color: var(--primary); }
 
 /* PRD 十三-2：目录容器固定可视区域，最多 10 条，超出滚动 */
-.dir-list { max-height: 230px; overflow-y: auto; margin-bottom: 8px; }
-.gd-group-body { max-height: 230px; overflow-y: auto; }
+.dir-list { max-height: 380px; overflow-y: auto; margin-bottom: 8px; }
+.gd-group-body { max-height: 380px; overflow-y: auto; }
 .dir-row .dr-title { flex: 1; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dir-row .dr-mod { font-size: 11px; color: var(--primary-deep); background: var(--primary-soft); padding: 3px 10px; border-radius: var(--capsule); font-weight: 600; }
 
