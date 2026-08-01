@@ -189,6 +189,7 @@ const get_ = (name, id) => new Promise((res, rej) => {
 let CLOUDBASE = false;
 let _tcbApp = null;
 let _cbTimer = null;
+let _cbLastError = "";
 const CB_COLL = "kitty_vault";
 const CB_SLOT = "main";
 function cbReady() { return typeof tcb !== "undefined" && !!state.cbEnvId; }
@@ -197,8 +198,10 @@ async function initCloudBase() {
   try {
     _tcbApp = tcb.init({ env: state.cbEnvId });
     await _tcbApp.auth().signInAnonymously();
+    _cbLastError = "";
     CLOUDBASE = true;
   } catch (e) {
+    _cbLastError = (e && (e.message || e.errMsg || String(e))) || "未知错误";
     console.error("CloudBase init failed", e);
     CLOUDBASE = false;
   }
@@ -1609,7 +1612,7 @@ function openSettings() {
       try { await pullCloudBase(); renderSidebar(); renderMain(); toast("已连接云端并开始同步"); }
       catch (e) { toast("连接云端失败：" + ((e && e.message) || "请检查环境 ID")); }
     } else if (state.cbEnvId) {
-      toast("连接云端失败：请检查环境 ID，并确认已开启匿名登录");
+      toast("连接云端失败：" + (_cbLastError || "请检查环境 ID，并确认已开启匿名登录"));
     } else {
       toast("设置已保存（未配置云端同步）");
     }
@@ -1619,7 +1622,7 @@ function openSettings() {
     state.cbEnvId = $("#s_cb_env", overlay).value.trim();
     savePrefs();
     await initCloudBase();
-    if (!CLOUDBASE) { toast("请先填好 CloudBase 的环境 ID，并确认已开启匿名登录"); return; }
+    if (!CLOUDBASE) { toast("连接云端失败：" + (_cbLastError || "请检查环境 ID，并确认已开启匿名登录")); return; }
     await pullCloudBase();
     await doSync();
     renderSidebar();
