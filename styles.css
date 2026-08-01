@@ -1,27 +1,32 @@
-/* ===================== 碎知识工作台 · 莫兰迪粉 + 浅米色 文艺治愈主题 ===================== */
+/* ===================== 小琦的碎片库 · 奶油浅色系 / 软萌贴纸 / 裸粉+马卡龙 ===================== */
 :root {
-  --bg: #f5f0ea;
-  --bg-soft: #efe7df;
-  --sidebar-bg: linear-gradient(180deg, #e7dcd3 0%, #efe6de 45%, #f3ece4 100%);
-  --card: #fffdfa;
-  --primary: #b98e8e;
-  --primary-deep: #9c7373;
-  --primary-soft: #e3d2d2;
-  --accent: #a8909a;
-  --accent-soft: #ece2e7;
-  --kitty-pink: #e3d2d2;
-  --kitty-purple: #a8909a;
-  --kitty-yellow: #d8c18a;
-  --text: #574e4e;
-  --text-soft: #8a7d7d;
-  --text-faint: #b3a6a6;
-  --border: #e0d4ca;
-  --border-soft: #efe8e0;
-  --shadow: 0 8px 28px rgba(150,120,120,0.16);
-  --shadow-soft: 0 4px 16px rgba(150,120,120,0.10);
-  --radius: 18px;
-  --radius-sm: 12px;
-  --capsule: 50px;
+  --bg: #FBF6F0;                                   /* 奶油白底（暖白偏米） */
+  --bg-soft: #F4ECE4;
+  --sidebar-bg: linear-gradient(180deg, #F7EDE6 0%, #FBF3EE 50%, #FFF8F3 100%);
+  --card: #FFFFFF;
+  --primary: #E7B7B0;                              /* 浅裸粉（主色，低饱和） */
+  --primary-deep: #D59A93;                         /* 裸粉·强调/文字 */
+  --primary-soft: #F6E2DF;                         /* 裸粉·浅底 */
+  --accent: #C9B6C9;                               /* 淡紫（马卡龙） */
+  --accent-soft: #EFE6EF;
+  --kitty-pink: #F6DCE0;
+  --kitty-purple: #D9C9E6;
+  --kitty-yellow: #F3E6BE;
+  --kitty-mint: #CFE9DC;
+  --kitty-blue: #D6E6F0;
+  --kitty-peach: #FBE0D2;
+  --kitty-lav: #E4DDEC;
+  --text: #6B5B58;                                 /* 暖灰棕，柔和 */
+  --text-soft: #9C8B88;
+  --text-faint: #C3B4B0;
+  --border: #EAD9D4;                               /* 纤细淡描线（暖裸粉灰） */
+  --border-soft: #F3E7E2;
+  --shadow: 0 12px 30px rgba(214,160,154,0.18);    /* 柔和贴纸投影 */
+  --shadow-soft: 0 6px 18px rgba(214,160,154,0.12);
+  --sticker: 0 8px 22px rgba(205,160,155,0.16), inset 0 0 0 1px rgba(255,255,255,0.65); /* 贴纸浮起 */
+  --radius: 26px;                                  /* 超大圆角 */
+  --radius-sm: 16px;
+  --capsule: 999px;                                /* 全胶囊 */
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -39,8 +44,8 @@ body::before {
   content: "";
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background:
-    radial-gradient(ellipse at 15% 85%, rgba(185,142,142,0.08) 0%, transparent 55%),
-    radial-gradient(ellipse at 85% 15%, rgba(168,144,154,0.08) 0%, transparent 55%);
+    radial-gradient(ellipse at 12% 88%, rgba(231,183,176,0.10) 0%, transparent 55%),
+    radial-gradient(ellipse at 88% 12%, rgba(201,182,201,0.10) 0%, transparent 55%);
   z-index: 0; pointer-events: none;
 }
 
@@ -59,7 +64,7 @@ body::before {
   min-width: 180px;
   max-width: 460px;
   background: var(--sidebar-bg);
-  border-right: 2px solid var(--border);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -136,7 +141,7 @@ body::before {
 
 /* 图标选择器 */
 .icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 8px; padding: 4px 0; }
-.icon-option { width: 100%; aspect-ratio: 1; font-size: 22px; border: 2px solid var(--border); border-radius: var(--radius); background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.1s, border-color 0.15s, background 0.15s; }
+.icon-option { width: 100%; aspect-ratio: 1; font-size: 22px; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.1s, border-color 0.15s, background 0.15s; }
 .icon-option:hover { transform: scale(1.08); border-color: var(--primary); }
 .icon-option.selected { border-color: var(--primary); background: var(--primary-soft); }
 .section-item.drop-before::before,
@@ -150,7 +155,7 @@ body::before {
 .add-section-btn {
   margin: 10px 16px 18px;
   padding: 11px 18px;
-  border: 2px dashed var(--primary);
+  border: 1.5px dashed var(--primary);
   background: rgba(255,255,255,0.5);
   color: var(--primary-deep);
   border-radius: var(--capsule);
@@ -203,7 +208,7 @@ body::before {
   padding: 14px 22px;
   background: rgba(255,255,255,0.65);
   backdrop-filter: blur(8px);
-  border-bottom: 2px solid var(--border);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
@@ -212,7 +217,7 @@ body::before {
 #globalSearch {
   width: 100%;
   padding: 11px 14px 11px 40px;
-  border: 2px solid var(--border);
+  border: 1px solid var(--border);
   border-radius: var(--capsule);
   background: #fff;
   font-size: 14px;
@@ -225,7 +230,7 @@ body::before {
 .search-results {
   position: absolute; top: 48px; left: 0; right: 0;
   background: #fff;
-  border: 2px solid var(--border);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   max-height: 60vh;
@@ -281,7 +286,7 @@ body::before {
 .content-head .ch-sub { font-size: 13px; color: var(--text-faint); margin-top: 3px; }
 .ch-export {
   margin-left: auto; padding: 8px 16px; font-size: 12px;
-  border: 2px solid var(--border); background: #fff; color: var(--primary-deep);
+  border: 1px solid var(--border); background: #fff; color: var(--primary-deep);
   border-radius: var(--capsule); cursor: pointer; white-space: nowrap;
   transition: background .2s, border .2s, transform .12s;
   font-weight: 600;
@@ -290,7 +295,7 @@ body::before {
 
 .panel {
   background: var(--card);
-  border: 2px solid var(--border-soft);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   margin-top: 20px;
   box-shadow: var(--shadow-soft);
@@ -366,8 +371,8 @@ body::before {
 .recents-block {
   margin-top: 26px;
   background: var(--card);
-  border: 2px solid var(--border-soft);
-  border-radius: 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: 22px;
   padding: 16px 18px;
 }
 .rb-head {
@@ -380,7 +385,7 @@ body::before {
 /* 二级模块卡片 */
 .module-card {
   margin-top: 18px;
-  border: 2px solid var(--border-soft);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   background: var(--card);
   box-shadow: var(--shadow-soft);
@@ -406,8 +411,8 @@ body::before {
 /* 🎀 记录卡片 — 圆润胶囊感 */
 .record-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-top: 16px; }
 .record-card {
-  border: 2px solid var(--border-soft);
-  border-radius: 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: 22px;
   padding: 16px;
   background: #fff;
   cursor: pointer;
@@ -450,7 +455,7 @@ body::before {
   display: flex; align-items: center; gap: 12px;
   padding: 14px 16px; margin: 8px 0;
   border-radius: var(--radius);
-  border: 2px solid var(--border-soft);
+  border: 1px solid var(--border-soft);
   background: #fff;
   box-shadow: var(--shadow-soft);
 }
@@ -492,14 +497,14 @@ body::before {
   overflow: hidden;
   box-shadow: 0 24px 64px rgba(224, 75, 116, 0.25);
   animation: pop 0.22s ease;
-  border: 2px solid var(--border);
+  border: 1px solid var(--border);
 }
 @keyframes pop { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
 .modal-head {
   display: flex; align-items: center; gap: 10px;
   padding: 16px 22px;
-  border-bottom: 2px solid var(--border);
+  border-bottom: 1px solid var(--border);
   background: linear-gradient(135deg, var(--primary-soft), var(--accent-soft));
 }
 .modal-head .mh-emoji { font-size: 22px; }
@@ -520,11 +525,11 @@ body::before {
   background: linear-gradient(135deg, var(--primary-soft), var(--accent-soft));
   display: flex; flex-direction: column; align-items: center; gap: 14px;
 }
-.preview-pane canvas { max-width: 100%; border-radius: 12px; box-shadow: var(--shadow-soft); background: #fff; }
-.preview-pane img { max-width: 100%; border-radius: 12px; box-shadow: var(--shadow-soft); }
+.preview-pane canvas { max-width: 100%; border-radius: 16px; box-shadow: var(--shadow-soft); background: #fff; }
+.preview-pane img { max-width: 100%; border-radius: 16px; box-shadow: var(--shadow-soft); }
 .preview-pane .text-view {
   width: 100%; max-width: 760px;
-  background: #fff; border-radius: 14px; padding: 28px 32px;
+  background: #fff; border-radius: 24px; padding: 28px 32px;
   line-height: 2; font-size: 14.5px; color: var(--text);
   white-space: pre-wrap; box-shadow: var(--shadow-soft);
   border: 1px solid var(--border-soft);
@@ -534,14 +539,14 @@ body::before {
 .info-pane {
   flex: 1; min-width: 300px; max-width: 400px;
   overflow-y: auto; padding: 22px 24px;
-  border-left: 2px solid var(--border-soft);
+  border-left: 1px solid var(--border-soft);
   background: #fff;
 }
 .info-block { margin-bottom: 20px; }
 .info-label { font-size: 12px; color: var(--text-faint); margin-bottom: 8px; letter-spacing: 0.5px; font-weight: 600; }
 .info-summary {
   font-size: 13.5px; line-height: 1.8; color: var(--text);
-  background: var(--bg-soft); border-radius: 14px;
+  background: var(--bg-soft); border-radius: 24px;
   padding: 14px 16px; white-space: pre-wrap;
   border: 1px solid var(--border-soft);
 }
@@ -557,7 +562,7 @@ body::before {
 .rel-chip:hover { background: var(--accent); }
 .rel-add-input {
   width: 100%; padding: 10px 14px;
-  border: 2px solid var(--border); border-radius: var(--capsule);
+  border: 1px solid var(--border); border-radius: var(--capsule);
   font-size: 13px; outline: none; margin-top: 10px;
 }
 .rel-add-input:focus { border-color: var(--primary); box-shadow: 0 0 0 4px var(--primary-soft); }
@@ -592,7 +597,7 @@ body::before {
 .field label { display: block; font-size: 13px; color: var(--text-soft); margin-bottom: 8px; font-weight: 600; }
 .field input[type=text], .field textarea, .field select {
   width: 100%; padding: 11px 14px;
-  border: 2px solid var(--border); border-radius: var(--capsule);
+  border: 1px solid var(--border); border-radius: var(--capsule);
   font-size: 14px; color: var(--text); outline: none; font-family: inherit; background: #fff;
   transition: border 0.2s, box-shadow 0.2s;
 }
@@ -604,7 +609,7 @@ body::before {
 .type-tabs { display: flex; gap: 10px; }
 .type-tab {
   flex: 1; text-align: center; padding: 12px;
-  border: 2px solid var(--border); border-radius: var(--capsule);
+  border: 1px solid var(--border); border-radius: var(--capsule);
   cursor: pointer; font-size: 14px; color: var(--text-soft);
   transition: all 0.2s; font-weight: 600;
 }
@@ -613,7 +618,7 @@ body::before {
   color: var(--primary-deep); font-weight: 700;
 }
 .file-drop {
-  border: 2px dashed var(--primary); border-radius: 16px;
+  border: 1.5px dashed var(--primary); border-radius: 22px;
   padding: 24px; text-align: center; color: var(--primary-deep);
   cursor: pointer; background: var(--bg-soft);
   transition: background 0.2s, transform 0.12s;
@@ -623,7 +628,7 @@ body::before {
 .file-drop.drag { background: var(--primary-soft); }
 .file-name { margin-top: 10px; font-size: 13px; color: var(--text-soft); }
 
-.form-footer { display: flex; gap: 12px; padding: 18px 28px; border-top: 2px solid var(--border-soft); }
+.form-footer { display: flex; gap: 12px; padding: 18px 28px; border-top: 1px solid var(--border-soft); }
 .form-footer button { flex: 1; padding: 12px; border-radius: var(--capsule); border: none; font-size: 14px; cursor: pointer; font-weight: 700; transition: transform 0.12s; }
 .btn-cancel { background: var(--bg-soft); color: var(--text-soft); }
 .btn-cancel:hover { background: var(--border); }
@@ -641,7 +646,7 @@ body::before {
   font-size: 15px; font-weight: 700; cursor: pointer; transition: transform 0.12s, box-shadow 0.2s;
 }
 .act-menu-btn.rename { background: linear-gradient(135deg, var(--primary), var(--primary-deep)); color: #fff; box-shadow: var(--shadow-soft); }
-.act-menu-btn.delete { background: #fff0f1; color: #d6455a; border: 2px solid #f3c2c8; }
+.act-menu-btn.delete { background: #FCEAEC; color: #D98A96; border: 1px solid #F6D2D8; }
 .act-menu-btn:hover { transform: translateY(-2px); }
 
 /* ===================== 🎀 设置弹窗 ===================== */
@@ -651,7 +656,7 @@ body::before {
 .settings-body .settings-hint {
   font-size: 12px; color: var(--text-faint);
   margin-bottom: 20px; line-height: 1.7;
-  background: var(--bg-soft); border-radius: 12px;
+  background: var(--bg-soft); border-radius: 16px;
   padding: 14px 16px; border: 1px solid var(--border-soft);
 }
 
@@ -668,7 +673,7 @@ body::before {
 
 @media (max-width: 720px) {
   .modal-body { flex-direction: column; }
-  .info-pane { max-width: none; border-left: none; border-top: 2px solid var(--border-soft); }
+  .info-pane { max-width: none; border-left: none; border-top: 1px solid var(--border-soft); }
 }
 
 /* ===================== 🎀 首页大模块网格 ===================== */
@@ -685,8 +690,8 @@ body::before {
 .home-tile {
   display: flex; flex-direction: column; align-items: flex-start; gap: 12px;
   padding: 26px 24px;
-  border-radius: 20px;
-  border: 2px solid var(--border-soft);
+  border-radius: 26px;
+  border: 1px solid var(--border-soft);
   background: var(--card);
   box-shadow: var(--shadow-soft);
   cursor: pointer;
@@ -723,19 +728,19 @@ body::before {
   width: 100%;
   padding: 12px;
   background: linear-gradient(145deg, #fff7f9, #fff0f4);
-  border: 3px dashed var(--primary-soft);
-  border-radius: 28px;
-  box-shadow: 0 12px 40px rgba(176, 122, 122, 0.14);
+  border: 2px dashed var(--primary-soft);
+  border-radius: 32px;
+  box-shadow: 0 12px 40px rgba(214,160,154,0.14);
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 .splash-img-wrap:hover {
   transform: translateY(-5px) rotate(0.5deg);
-  box-shadow: 0 16px 50px rgba(176, 122, 122, 0.2);
+  box-shadow: 0 16px 50px rgba(214,160,154,0.2);
 }
 .splash-img-wrap img {
   width: 100%;
   height: auto;
-  border-radius: 20px;
+  border-radius: 26px;
   display: block;
   object-fit: cover;
 }
@@ -745,17 +750,17 @@ body::before {
   color: var(--primary-deep);
   letter-spacing: 1.5px;
   background: rgba(255,255,255,0.85);
-  border: 2px solid var(--primary-soft);
+  border: 1px solid var(--primary-soft);
   padding: 12px 28px;
   border-radius: 50px;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(176, 122, 122, 0.12);
+  box-shadow: 0 6px 20px rgba(214,160,154,0.12);
   transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 .splash-enter:hover {
   transform: translateY(-3px) scale(1.03);
   background: #fff;
-  box-shadow: 0 10px 28px rgba(176, 122, 122, 0.2);
+  box-shadow: 0 10px 28px rgba(214,160,154,0.2);
 }
 .splash-enter:active {
   transform: translateY(0) scale(0.98);
@@ -770,7 +775,7 @@ body::before {
     height: auto;
     max-height: 60vh;
     object-fit: cover;
-    border-radius: 16px;
+    border-radius: 22px;
   }
 }
 
@@ -787,7 +792,7 @@ body::before {
     width: 82vw; max-width: 340px; min-width: 0;
     transform: translateX(-100%);
     transition: transform 0.25s ease;
-    box-shadow: 0 0 40px rgba(224,75,116,0.25);
+    box-shadow: 0 0 40px rgba(214,160,154,0.28);
     opacity: 1;
   }
   #sidebar.collapsed {
@@ -815,11 +820,11 @@ body::before {
   .rc-summary { font-size: 11px; }
 
   .home-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-  .home-tile { padding: 18px 16px; border-radius: 18px; gap: 10px; }
+  .home-tile { padding: 18px 16px; border-radius: 24px; gap: 10px; }
   .ht-icon { font-size: 36px; }
   .ht-name { font-size: 16px; }
 
-  .modal { width: 96vw; height: 94vh; border-radius: 20px; }
+  .modal { width: 96vw; height: 94vh; border-radius: 26px; }
   .modal-head { padding: 14px 18px; }
   .info-actions { flex-wrap: wrap; }
   .info-actions button { flex: 1 1 45%; }
@@ -832,7 +837,7 @@ body::before {
 .field-head label { margin-bottom: 0; }
 .mini-btn {
   padding: 7px 16px;
-  border: 2px solid var(--primary);
+  border: 1px solid var(--primary);
   border-radius: var(--capsule);
   background: var(--primary-soft);
   color: var(--primary-deep); font-size: 13px;
@@ -894,3 +899,24 @@ body::before {
 }
 .mv-opt:hover { background: var(--bg-soft); }
 .mv-ic { font-size: 17px; }
+
+/* ===================== 奶油贴纸质感增强 ===================== */
+/* 主要卡片：柔和浮起 + 内描高光，营造贴纸感 */
+.record-card, .module-card, .recents-block, .home-tile {
+  box-shadow: var(--sticker);
+}
+/* 首页瓦片图标：马卡龙色圆角贴片 */
+.home-tile .ht-icon {
+  width: 60px; height: 60px; border-radius: 20px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--primary-soft);
+  box-shadow: var(--shadow-soft);
+  font-size: 30px;
+}
+.home-tile:nth-child(5n+1) .ht-icon { background: var(--kitty-pink); }
+.home-tile:nth-child(5n+2) .ht-icon { background: var(--kitty-mint); }
+.home-tile:nth-child(5n+3) .ht-icon { background: var(--kitty-blue); }
+.home-tile:nth-child(5n+4) .ht-icon { background: var(--kitty-yellow); }
+.home-tile:nth-child(5n+5) .ht-icon { background: var(--kitty-lav); }
+/* 批量操作栏：统一为裸粉主色，融入奶油主题 */
+.batch-bar { background: rgba(213,154,147,0.96); }
