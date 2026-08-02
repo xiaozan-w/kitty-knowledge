@@ -469,15 +469,23 @@ body::before {
 .module-head[draggable=true] { cursor: grab; }
 .module-head[draggable=true]:active { cursor: grabbing; }
 .module-head.dragging { opacity: 0.45; }
+.module-head .ph-caret { color: var(--text-faint); font-size: 13px; width: 16px; text-align: center; transition: transform 0.2s ease; flex: none; }
+.module-card.collapsed .ph-caret { transform: rotate(-90deg); }
 .module-head .mh-grip { cursor: grab; color: var(--text-faint); font-size: 15px; user-select: none; }
 .module-head .mh-icon { font-size: 16px; }
 .module-head .mh-title { flex: 1; font-size: 15px; font-weight: 700; }
 .module-head .mh-count { font-size: 11px; color: var(--primary-deep); background: #fff; padding: 2px 10px; border-radius: var(--capsule); font-weight: 600; }
-.module-head .mh-actions { display: flex; gap: 6px; }
+.module-head .mh-actions { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+.module-head .mh-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; flex: none; }
+.module-head .mh-actions .mh-del { color: var(--primary-deep); }
 .module-body { padding: 6px 20px 18px; }
 
 /* 🎀 记录卡片 — 圆润胶囊感 */
 .record-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-top: 16px; }
+/* 每个小模块记录区：约显示 6 条，超出自带垂直滚动条（响应式列数下按高度近似） */
+.module-records { max-height: 460px; overflow-y: auto; margin-top: 16px; padding-right: 4px; }
+.module-records .record-grid { margin-top: 0; }
+@media (max-width: 820px) { .module-records { max-height: 560px; } }  /* 手机 2 列约 3 行 ≈ 6 条 */
 .record-card {
   border: 1px solid var(--border-soft);
   border-radius: 22px;

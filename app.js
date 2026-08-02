@@ -890,20 +890,21 @@ function moduleCardHTML(m, recs) {
   return `
   <div class="module-card${collapsed ? " collapsed" : ""}">
     <div class="module-head" data-mod="${m.id}" draggable="true">
+      <span class="ph-caret" title="收起 / 展开">▾</span>
       <span class="mh-grip" title="拖拽排序">⠿</span>
       <span class="mh-icon">${esc(m.icon || "📑")}</span>
       <span class="mh-title">${esc(m.name)}</span>
       <span class="mh-count">${recs.length}</span>
       <span class="mh-actions">
         <button class="icon-btn" data-addrec="${m.id}" title="新增记录">＋</button>
-        <button class="icon-btn" data-delmod="${m.id}" title="删除子模块">🗑</button>
+        <span class="mh-sep"></span>
+        <button class="icon-btn mh-del" data-delmod="${m.id}" title="删除子模块">🗑</button>
       </span>
-      <span class="ph-caret" style="color:var(--text-faint);font-size:13px">▾</span>
     </div>
     <div class="module-body">
       <div style="font-size:12px;color:var(--text-faint);margin:8px 2px 2px">本模块目录</div>
       ${localDir}
-      ${cards}
+      <div class="module-records">${cards}</div>
     </div>
   </div>`;
 }
