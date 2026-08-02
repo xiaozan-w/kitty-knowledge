@@ -912,10 +912,11 @@ function recordCardHTML(r) {
   const tm = TYPE_META[r.fileType] || TYPE_META.text;
   const tags = (r.tags || []).slice(0, 3).map((t) => `<span class="tag-chip">#${esc(t)}</span>`).join("");
   const relMark = r.relations && r.relations.length ? `<span class="rc-rel" title="已关联 ${r.relations.length} 条">🔗</span>` : "";
+  const linkMark = r.link ? `<span class="rc-link" title="含来源链接">🌐</span>` : "";
   return `
   <div class="record-card" data-rec="${r.id}">
     <span class="rc-check">✓</span>
-    ${relMark}
+    ${relMark}${linkMark}
     <span class="rc-star${r.starred ? " on" : ""}" data-star="${r.id}" title="${r.starred ? "取消收藏" : "收藏"}">${r.starred ? "★" : "☆"}</span>
     <div class="rc-type">${tm.icon}</div>
     <div class="rc-title">${esc(r.title)}</div>
@@ -1316,6 +1317,10 @@ async function openEditor(recId, presetModuleId) {
           <input type="text" id="f_tags" placeholder="速算, 资料分析, 技巧" />
         </div>
         <div class="field">
+          <label>🔗 来源链接（选填，记录出处，详情里可一键跳转）</label>
+          <input type="url" id="f_link" placeholder="https://… 粘贴原链接" />
+        </div>
+        <div class="field">
           <label>内容类型</label>
           <div class="type-tabs">
             <div class="type-tab" data-t="pdf">📄 PDF 文件</div>
@@ -1358,6 +1363,7 @@ async function openEditor(recId, presetModuleId) {
   $("#f_title", overlay).value = existing?.title || "";
   $("#f_tags", overlay).value = (existing?.tags || []).join(", ");
   $("#f_summary", overlay).value = existing?.summary || "";
+  $("#f_link", overlay).value = existing?.link || "";
 
   const setType = (t) => {
     fileType = t;
@@ -1428,6 +1434,7 @@ async function openEditor(recId, presetModuleId) {
     }
     const tags = $("#f_tags", overlay).value.split(/[,，\s]+/).map((t) => t.trim()).filter(Boolean);
     const summary = $("#f_summary", overlay).value.trim();
+    const link = $("#f_link", overlay).value.trim();
 
     let blob = existing?.blob || null;
     let fileName = existing?.fileName || "";
@@ -1438,8 +1445,8 @@ async function openEditor(recId, presetModuleId) {
 
     const now = Date.now();
     const rec = existing
-      ? { ...existing, title, tags, summary, fileType, moduleId: chosenMid, sectionId: sec.id, blob, fileName, updatedAt: now }
-      : { id: uid("rec"), title, tags, summary, fileType, moduleId: chosenMid, sectionId: sec.id, blob, fileName, relations: [], createdAt: now, updatedAt: now };
+      ? { ...existing, title, tags, summary, link, fileType, moduleId: chosenMid, sectionId: sec.id, blob, fileName, updatedAt: now }
+      : { id: uid("rec"), title, tags, summary, link, fileType, moduleId: chosenMid, sectionId: sec.id, blob, fileName, relations: [], createdAt: now, updatedAt: now };
 
     await put_("records", rec);
     if (existing) state.records = state.records.map((r) => (r.id === rec.id ? rec : r));
@@ -1733,6 +1740,12 @@ function renderInfo(pane, rec) {
     <div class="info-block">
       <div class="info-label">标签</div>
       <div class="info-meta-row">${tags}</div>
+    </div>
+    <div class="info-block">
+      <div class="info-label">🔗 来源链接</div>
+      ${rec.link
+        ? `<a class="info-link" href="${esc(rec.link)}" target="_blank" rel="noopener noreferrer">${esc(rec.link)} <span class="info-link-go">↗</span></a>`
+        : `<div style="font-size:12.5px;color:var(--text-faint)">未填写来源链接</div>`}
     </div>
     <div class="info-block">
       <div class="info-label">内容摘要</div>
