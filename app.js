@@ -982,6 +982,21 @@ function b64ToBlob(b64, type) {
   return new Blob([bytes], { type: type || "application/octet-stream" });
 }
 
+/* 备份序列化：单文件 + 多图 images 一并转为 base64 */
+async function serializeRec(r) {
+  const out = { ...r };
+  out.blob = r.blob ? await blobToB64(r.blob) : null;
+  out._blobType = r.blob ? r.blob.type : null;
+  if (Array.isArray(r.images) && r.images.length) {
+    out.images = await Promise.all(r.images.map(async (im) => ({
+      name: im.name || "",
+      blob: im.blob ? await blobToB64(im.blob) : null,
+      _blobType: im.blob ? im.blob.type : null,
+    })));
+  }
+  return out;
+}
+
 /* ---------- 导入 / 导出备份 ---------- */
 // 生成一份「永远有效」的单文件离线版并下载（不依赖任何服务器）
 async function downloadOffline() {
@@ -1005,13 +1020,7 @@ async function downloadOffline() {
 
 async function exportData() {
   const activeRecs = state.records.filter((r) => !r.deleted);
-  const records = await Promise.all(
-    activeRecs.map(async (r) => ({
-      ...r,
-      blob: r.blob ? await blobToB64(r.blob) : null,
-      _blobType: r.blob ? r.blob.type : null,
-    }))
-  );
+  const records = await Promise.all(activeRecs.map((r) => serializeRec(r)));
   const data = {
     app: "pkWorkbench", version: 1, exportedAt: Date.now(),
     sections: state.sections, modules: state.modules, records,
@@ -1034,11 +1043,7 @@ async function exportSection(secId) {
   const mods = modulesOf(sec.id);
   const modIds = new Set(mods.map((m) => m.id));
   const recs = state.records.filter((r) => !r.deleted && (r.sectionId === sec.id || modIds.has(r.moduleId)));
-  const records = await Promise.all(recs.map(async (r) => ({
-    ...r,
-    blob: r.blob ? await blobToB64(r.blob) : null,
-    _blobType: r.blob ? r.blob.type : null,
-  })));
+  const records = await Promise.all(recs.map((r) => serializeRec(r)));
   const data = {
     app: "pkWorkbench", version: 1, kind: "section",
     exportedAt: Date.now(), sectionName: sec.name,
@@ -1075,6 +1080,12 @@ async function importData(file) {
     const rec = { ...r };
     if (rec.blob && rec._blobType !== undefined) rec.blob = b64ToBlob(rec.blob, rec._blobType);
     delete rec._blobType;
+    if (Array.isArray(rec.images)) {
+      rec.images = rec.images.map((im) => ({
+        name: im.name || "",
+        blob: im.blob ? b64ToBlob(im.blob, im._blobType) : null,
+      }));
+    }
     await put_("records", rec);
   }
   state.sections = await all_("sections");
@@ -1097,7 +1108,7 @@ async function recordToTextBlock(r) {
   try {
     if (r.fileType === "text" && r.blob) content = await r.blob.text();
     else if (r.fileType === "pdf" && r.blob && window.pdfjsLib) { const tx = await extractPdfText(r.blob); content = tx.text || ""; }
-    else if (r.fileType === "image" && r.blob) content = `[图片文件：${r.fileName || "未命名"}]`;
+    else if (r.fileType === "image") content = `[图片文件：${(r.images && r.images.length) ? r.images.length + " 张" : (r.fileName || "未命名")}]`;
   } catch (_) { content = `[文件提取失败]`; }
   if (!content) content = r.summary || "（无内容）";
   return [
@@ -1292,7 +1303,8 @@ async function openEditor(recId, presetModuleId) {
   if (mods.length === 0) { toast("请先在该板块下新增子模块"); return; }
 
   let fileType = existing?.fileType || "pdf";
-  let pickedFile = null;     // {blob, name}
+  let pickedFile = null;     // {blob, name}（PDF 单文件）
+  let pickedImages = [];     // 图片多图：[{ blob, name }]
   let chosenMid = existing?.moduleId || presetModuleId || mods[0].id;
 
   const overlay = document.createElement("div");
@@ -1331,8 +1343,9 @@ async function openEditor(recId, presetModuleId) {
         </div>
         <div class="field" id="f_fileWrap">
           <label>上传文件（本地，仅存于本机）</label>
-          <div class="file-drop" id="f_drop">点击或拖拽文件到此处<br/><span style="font-size:12px;color:var(--text-faint)">支持 PDF / 图片（从文件夹选择）</span></div>
+          <div class="file-drop" id="f_drop">点击或拖拽文件到此处<br/><span style="font-size:12px;color:var(--text-faint)">支持 PDF / 多张图片（图片可一次选择多张）</span></div>
           <div class="file-name" id="f_fname"></div>
+          <div class="img-thumbs" id="f_thumbs"></div>
           <input type="file" id="f_file" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp" class="hidden" />
         </div>
         <div class="field">
@@ -1370,8 +1383,16 @@ async function openEditor(recId, presetModuleId) {
     fileType = t;
     $$(".type-tab", overlay).forEach((x) => x.classList.toggle("active", x.dataset.t === t));
     const wrap = $("#f_fileWrap", overlay);
+    const fi = $("#f_file", overlay);
     if (t === "text") { wrap.style.display = "none"; }
-    else { wrap.style.display = ""; }
+    else {
+      wrap.style.display = "";
+      // 图片支持一次多选；PDF 仍为单文件
+      fi.multiple = (t === "image");
+      fi.accept = (t === "image")
+        ? ".jpg,.jpeg,.png,.gif,.webp,image/*"
+        : ".pdf,application/pdf";
+    }
   };
   $$(".type-tab", overlay).forEach((x) =>
     x.addEventListener("click", () => setType(x.dataset.t))
@@ -1379,28 +1400,69 @@ async function openEditor(recId, presetModuleId) {
   setType(fileType);
 
   const drop = $("#f_drop", overlay), fileInput = $("#f_file", overlay), fname = $("#f_fname", overlay);
-  const onFile = (f) => {
-    if (!f) return;
-    if (fileType === "pdf" && f.type !== "application/pdf" && !f.name.toLowerCase().endsWith(".pdf")) {
-      toast("请选择 PDF 文件"); return;
-    }
-    if (fileType === "image" && !f.type.startsWith("image/")) { toast("请选择图片文件"); return; }
-    pickedFile = { blob: f, name: f.name };
-    fname.textContent = "已选择：" + f.name + "（" + (f.size / 1024).toFixed(0) + " KB）";
-    // 标题留空时，自动用文件名（去扩展名）作为标题
-    if (!$("#f_title", overlay).value.trim()) {
-      $("#f_title", overlay).value = f.name.replace(/\.[^.]+$/, "");
+  const thumbsEl = $("#f_thumbs", overlay);
+
+  // 已选图片缩略图（支持删除单张）
+  const renderImageThumbs = () => {
+    thumbsEl.innerHTML = "";
+    if (!pickedImages.length) { thumbsEl.classList.remove("show"); return; }
+    thumbsEl.classList.add("show");
+    pickedImages.forEach((im, idx) => {
+      const cell = document.createElement("div");
+      cell.className = "img-thumb";
+      const img = document.createElement("img");
+      img.src = URL.createObjectURL(im.blob);
+      img.onload = () => URL.revokeObjectURL(img.src);
+      const del = document.createElement("button");
+      del.type = "button"; del.className = "img-thumb-del"; del.textContent = "×";
+      del.onclick = (e) => { e.stopPropagation(); pickedImages.splice(idx, 1); renderImageThumbs(); };
+      cell.appendChild(img); cell.appendChild(del);
+      thumbsEl.appendChild(cell);
+    });
+    fname.textContent = "已选择 " + pickedImages.length + " 张图片";
+  };
+
+  const onFiles = (files) => {
+    if (!files || !files.length) return;
+    if (fileType === "pdf") {
+      const f = files[0];
+      if (f.type !== "application/pdf" && !f.name.toLowerCase().endsWith(".pdf")) { toast("请选择 PDF 文件"); return; }
+      pickedFile = { blob: f, name: f.name };
+      fname.textContent = "已选择：" + f.name + "（" + (f.size / 1024).toFixed(0) + " KB）";
+      // 标题留空时，自动用文件名（去扩展名）作为标题
+      if (!$("#f_title", overlay).value.trim()) {
+        $("#f_title", overlay).value = f.name.replace(/\.[^.]+$/, "");
+      }
+    } else if (fileType === "image") {
+      const ok = [];
+      for (const f of files) { if (f.type.startsWith("image/")) ok.push({ blob: f, name: f.name }); }
+      if (!ok.length) { toast("请选择图片文件"); return; }
+      pickedImages = pickedImages.concat(ok);   // 可多次选择，累积多图
+      renderImageThumbs();
+      if (!$("#f_title", overlay).value.trim()) {
+        $("#f_title", overlay).value = ok[0].name.replace(/\.[^.]+$/, "");
+      }
     }
   };
   drop.onclick = () => fileInput.click();
-  fileInput.onchange = () => onFile(fileInput.files[0]);
+  fileInput.onchange = () => onFiles(fileInput.files);
   drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("drag"); };
   drop.ondragleave = () => drop.classList.remove("drag");
-  drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("drag"); onFile(e.dataTransfer.files[0]); };
+  drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("drag"); onFiles(e.dataTransfer.files); };
+
+  // 编辑已有图片记录：把原图（单图或多图）预填进已选列表
+  if (existing && existing.fileType === "image") {
+    pickedImages = existing.images
+      ? existing.images.map((i) => ({ blob: i.blob, name: i.name }))
+      : (existing.blob ? [{ blob: existing.blob, name: existing.fileName }] : []);
+    if (pickedImages.length) renderImageThumbs();
+  }
 
   // 一键分析概括
   $("#f_analyze", overlay).onclick = async () => {
-    const blob = pickedFile ? pickedFile.blob : existing ? existing.blob : null;
+    let blob = null;
+    if (fileType === "image") blob = pickedImages[0]?.blob || existing?.images?.[0]?.blob || null;
+    else blob = pickedFile ? pickedFile.blob : existing?.blob || null;
     if (!blob) { toast("请先上传文件，再点概括"); return; }
     const btn = $("#f_analyze", overlay);
     const original = btn.textContent;
@@ -1439,15 +1501,24 @@ async function openEditor(recId, presetModuleId) {
 
     let blob = existing?.blob || null;
     let fileName = existing?.fileName || "";
-    if (fileType !== "text") {
+    let images = existing?.images || null;
+    if (fileType === "text") {
+      blob = null; fileName = ""; images = null;
+    } else if (fileType === "image") {
+      if (pickedImages.length) { images = pickedImages; blob = null; fileName = ""; }
+      else if (!existing && !images) { toast("请上传至少一张图片"); return; }
+      else if (!pickedImages.length && existing?.images) { images = existing.images; }  // 编辑时未重选，保留原图
+      blob = null; fileName = "";
+    } else { // pdf
       if (pickedFile) { blob = pickedFile.blob; fileName = pickedFile.name; }
-      else if (!existing && !blob) { toast("请上传" + (fileType === "pdf" ? "PDF" : "图片") + "文件"); return; }
-    } else { blob = null; fileName = ""; }
+      else if (!existing && !blob) { toast("请上传 PDF 文件"); return; }
+      images = null;
+    }
 
     const now = Date.now();
     const rec = existing
-      ? { ...existing, title, tags, summary, link, fileType, moduleId: chosenMid, sectionId: sec.id, blob, fileName, updatedAt: now }
-      : { id: uid("rec"), title, tags, summary, link, fileType, moduleId: chosenMid, sectionId: sec.id, blob, fileName, relations: [], createdAt: now, updatedAt: now };
+      ? { ...existing, title, tags, summary, link, fileType, moduleId: chosenMid, sectionId: sec.id, blob, fileName, images, updatedAt: now }
+      : { id: uid("rec"), title, tags, summary, link, fileType, moduleId: chosenMid, sectionId: sec.id, blob, fileName, images, relations: [], createdAt: now, updatedAt: now };
 
     await put_("records", rec);
     if (existing) state.records = state.records.map((r) => (r.id === rec.id ? rec : r));
@@ -1694,11 +1765,23 @@ async function renderPreview(pane, rec) {
       div.className = "text-view";
       div.textContent = rec.blob ? await rec.blob.text() : (rec.summary || "（无文字内容）");
       pane.appendChild(div);
-    } else if (rec.fileType === "image" && rec.blob) {
-      const img = document.createElement("img");
-      img.src = URL.createObjectURL(rec.blob);
-      img.onload = () => URL.revokeObjectURL(img.src);
-      pane.appendChild(img);
+    } else if (rec.fileType === "image") {
+      const imgs = (rec.images && rec.images.length)
+        ? rec.images
+        : (rec.blob ? [{ blob: rec.blob, name: rec.fileName }] : []);
+      if (!imgs.length) {
+        pane.innerHTML = `<div class="preview-loading">暂无可预览的图片</div>`;
+      } else {
+        const wrap = document.createElement("div");
+        wrap.className = "preview-imgs";
+        imgs.forEach((im) => {
+          const img = document.createElement("img");
+          img.src = URL.createObjectURL(im.blob);
+          img.onload = () => URL.revokeObjectURL(img.src);
+          wrap.appendChild(img);
+        });
+        pane.appendChild(wrap);
+      }
     } else if (rec.fileType === "pdf" && rec.blob && window.pdfjsLib) {
       const url = URL.createObjectURL(rec.blob);
       const pdf = await pdfjsLib.getDocument(url).promise;
@@ -1761,7 +1844,7 @@ function renderInfo(pane, rec) {
     <div class="info-actions">
       ${rec.deleted
         ? `<button class="btn-star" id="btnRestore">♻️ 恢复</button><button class="btn-del" id="btnPurge">🗑 彻底删除</button>`
-        : `<button class="btn-star" id="btnStar">${rec.starred ? "⭐ 已收藏" : "☆ 收藏"}</button><button class="btn-edit" id="btnEdit">✏️ 编辑</button>${rec.blob && rec.fileType !== "text" ? `<button class="btn-download" id="btnDownload">⬇ 下载原文件</button>` : ""}<button class="btn-del" id="btnDel">🗑 删除</button>`}
+        : `<button class="btn-star" id="btnStar">${rec.starred ? "⭐ 已收藏" : "☆ 收藏"}</button><button class="btn-edit" id="btnEdit">✏️ 编辑</button>${(rec.fileType !== "text" && (rec.blob || (rec.fileType === "image" && rec.images && rec.images.length))) ? `<button class="btn-download" id="btnDownload">⬇ 下载原文件</button>` : ""}<button class="btn-del" id="btnDel">🗑 删除</button>`}
     </div>`;
 
   if (rec.deleted) {
@@ -1778,10 +1861,22 @@ function renderInfo(pane, rec) {
     $("#btnEdit", pane).onclick = () => { const ov = pane.closest(".modal-overlay"); ov.remove(); openEditor(rec.id); };
     if ($("#btnDownload", pane)) {
       $("#btnDownload", pane).onclick = () => {
-        const url = URL.createObjectURL(rec.blob);
-        const a = document.createElement("a"); a.href = url; a.download = rec.fileName || "文件"; document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 3000);
-        toast("已下载原文件「" + (rec.fileName || "文件") + "」");
+        const imgs = (rec.fileType === "image")
+          ? (rec.images && rec.images.length ? rec.images : (rec.blob ? [{ blob: rec.blob, name: rec.fileName }] : []))
+          : null;
+        if (imgs && imgs.length) {
+          imgs.forEach((im, i) => {
+            const url = URL.createObjectURL(im.blob);
+            const a = document.createElement("a"); a.href = url; a.download = im.name || ("图片" + (i + 1)); document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 3000);
+          });
+          toast("已下载 " + imgs.length + " 张原图");
+        } else if (rec.blob) {
+          const url = URL.createObjectURL(rec.blob);
+          const a = document.createElement("a"); a.href = url; a.download = rec.fileName || "文件"; document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 3000);
+          toast("已下载原文件「" + (rec.fileName || "文件") + "」");
+        }
       };
     }
     $("#btnDel", pane).onclick = () => { const ov = pane.closest(".modal-overlay"); ov.remove(); deleteRecord(rec.id); };
