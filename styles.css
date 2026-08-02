@@ -471,6 +471,7 @@ body::before {
 .module-head.dragging { opacity: 0.45; }
 .module-head .ph-caret { color: var(--text-faint); font-size: 13px; width: 16px; text-align: center; transition: transform 0.2s ease; flex: none; }
 .module-card.collapsed .ph-caret { transform: rotate(-90deg); }
+.module-card.collapsed .module-body { display: none; }
 .module-head .mh-grip { cursor: grab; color: var(--text-faint); font-size: 15px; user-select: none; }
 .module-head .mh-icon { font-size: 16px; }
 .module-head .mh-title { flex: 1; font-size: 15px; font-weight: 700; }
