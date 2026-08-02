@@ -14,7 +14,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="碎知识Kitty" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=42" />
+  <link rel="stylesheet" href="styles.css?v=43" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
@@ -31,6 +31,7 @@
         <button id="exportTextBtn" class="footer-btn">📄 导出文本</button>
         <button id="importBtn" class="footer-btn">⤒ 导入</button>
         <button id="offlineBtn" class="footer-btn offline-btn">⬇️ 离线版</button>
+        <button id="themeBtn" class="footer-btn theme-btn">🎨 风格</button>
         <button id="settingsBtn" class="footer-btn settings-btn">⚙️ 设置</button>
         <input type="file" id="importFile" accept=".json,.md,.txt,.markdown,application/json,text/markdown,text/plain" class="hidden" />
       </div>
@@ -68,11 +69,11 @@
   </div>
   <div id="toast" class="toast hidden"></div>
 
-  <script src="app.js?v=42"></script>
+  <script src="app.js?v=43"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function() {
-        navigator.serviceWorker.register('sw.js?v=42').then(function(reg) {
+        navigator.serviceWorker.register('sw.js?v=43').then(function(reg) {
           reg.addEventListener('updatefound', function() {
             var installing = reg.installing;
             installing.addEventListener('statechange', function() {

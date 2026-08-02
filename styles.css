@@ -27,6 +27,74 @@
   --radius: 26px;                                  /* 超大圆角 */
   --radius-sm: 16px;
   --capsule: 999px;                                /* 全胶囊 */
+  --glow-1: rgba(231,183,176,0.10);
+  --glow-2: rgba(201,182,201,0.10);
+}
+
+/* ===================== 四季风格主题（一键切换） ===================== */
+/* 春日桃粉 */
+[data-theme="spring"] {
+  --bg: #FBF2F2; --bg-soft: #F5E6E8;
+  --sidebar-bg: linear-gradient(180deg, #F9EAEC 0%, #FBF2F4 50%, #FDF8F8 100%);
+  --card: #FFFFFF;
+  --primary: #E0A8A8; --primary-deep: #C98A8A; --primary-soft: #F6DFE0;
+  --accent: #D6B8D6; --accent-soft: #EFE4EF;
+  --kitty-pink: #F6DCE4; --kitty-purple: #E4D6E8; --kitty-yellow: #F3E6D0;
+  --kitty-mint: #D8E8DE; --kitty-blue: #D6E2F0; --kitty-peach: #FADBD2; --kitty-lav: #EBE0EC;
+  --text: #6B5458; --text-soft: #9C8588; --text-faint: #CAB4B6;
+  --border: #EAD0D0; --border-soft: #F3E2E2;
+  --shadow: 0 12px 30px rgba(200,150,150,0.18);
+  --shadow-soft: 0 6px 18px rgba(200,150,150,0.12);
+  --sticker: 0 8px 22px rgba(195,150,150,0.16), inset 0 0 0 1px rgba(255,255,255,0.65);
+  --glow-1: rgba(224,168,168,0.10); --glow-2: rgba(214,184,214,0.10);
+}
+/* 夏日荷绿 */
+[data-theme="summer"] {
+  --bg: #F4F7F1; --bg-soft: #E8EDE3;
+  --sidebar-bg: linear-gradient(180deg, #E8F0E4 0%, #F1F6EE 50%, #F8FBF6 100%);
+  --card: #FFFFFF;
+  --primary: #98B088; --primary-deep: #6F8A5E; --primary-soft: #DEE8D8;
+  --accent: #A8B898; --accent-soft: #E2EBDC;
+  --kitty-pink: #E8D4D8; --kitty-purple: #D4D4E0; --kitty-yellow: #E8E2C0;
+  --kitty-mint: #CFE9D8; --kitty-blue: #C8D8E0; --kitty-peach: #F0DCC8; --kitty-lav: #E0D8E8;
+  --text: #545A4E; --text-soft: #7F8778; --text-faint: #B4B8AE;
+  --border: #D0DCC8; --border-soft: #E2EBE0;
+  --shadow: 0 12px 30px rgba(130,150,120,0.18);
+  --shadow-soft: 0 6px 18px rgba(130,150,120,0.12);
+  --sticker: 0 8px 22px rgba(125,150,115,0.16), inset 0 0 0 1px rgba(255,255,255,0.65);
+  --glow-1: rgba(152,176,136,0.10); --glow-2: rgba(168,184,152,0.10);
+}
+/* 秋日枫红 */
+[data-theme="autumn"] {
+  --bg: #FAF3F0; --bg-soft: #F1E6E2;
+  --sidebar-bg: linear-gradient(180deg, #F5E8E4 0%, #FAF2EF 50%, #FDF9F7 100%);
+  --card: #FFFFFF;
+  --primary: #C07870; --primary-deep: #9E534D; --primary-soft: #F0D9D5;
+  --accent: #B89080; --accent-soft: #EBDDD6;
+  --kitty-pink: #F2D2D0; --kitty-purple: #D8C8D0; --kitty-yellow: #F0D8A8;
+  --kitty-mint: #C8D8C8; --kitty-blue: #C8D4E0; --kitty-peach: #F5C8B8; --kitty-lav: #E4D8E0;
+  --text: #6B4E4A; --text-soft: #9C7D78; --text-faint: #C8B0AB;
+  --border: #E3C8C2; --border-soft: #F0E0DC;
+  --shadow: 0 12px 30px rgba(180,120,112,0.18);
+  --shadow-soft: 0 6px 18px rgba(180,120,112,0.12);
+  --sticker: 0 8px 22px rgba(175,120,112,0.16), inset 0 0 0 1px rgba(255,255,255,0.65);
+  --glow-1: rgba(192,120,112,0.10); --glow-2: rgba(184,144,128,0.10);
+}
+/* 冬日雪蓝 */
+[data-theme="winter"] {
+  --bg: #F2F5F7; --bg-soft: #E6ECF0;
+  --sidebar-bg: linear-gradient(180deg, #E6EEF4 0%, #F2F6F9 50%, #F8FAFC 100%);
+  --card: #FFFFFF;
+  --primary: #7A9AB8; --primary-deep: #507090; --primary-soft: #D6E2EC;
+  --accent: #90A8B8; --accent-soft: #D8E4EC;
+  --kitty-pink: #EAD0D8; --kitty-purple: #D8D4E4; --kitty-yellow: #E8E0C0;
+  --kitty-mint: #C8E0E0; --kitty-blue: #C8DCE8; --kitty-peach: #E8D4D0; --kitty-lav: #DCD8E8;
+  --text: #4E5A64; --text-soft: #788590; --text-faint: #B0BAC2;
+  --border: #C8D6E0; --border-soft: #E2EBF0;
+  --shadow: 0 12px 30px rgba(110,140,160,0.18);
+  --shadow-soft: 0 6px 18px rgba(110,140,160,0.12);
+  --sticker: 0 8px 22px rgba(105,140,165,0.16), inset 0 0 0 1px rgba(255,255,255,0.65);
+  --glow-1: rgba(122,154,184,0.10); --glow-2: rgba(144,168,184,0.10);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -44,8 +112,8 @@ body::before {
   content: "";
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background:
-    radial-gradient(ellipse at 12% 88%, rgba(231,183,176,0.10) 0%, transparent 55%),
-    radial-gradient(ellipse at 88% 12%, rgba(201,182,201,0.10) 0%, transparent 55%);
+    radial-gradient(ellipse at 12% 88%, var(--glow-1) 0%, transparent 55%),
+    radial-gradient(ellipse at 88% 12%, var(--glow-2) 0%, transparent 55%);
   z-index: 0; pointer-events: none;
 }
 
@@ -918,5 +986,52 @@ body::before {
 .home-tile:nth-child(5n+3) .ht-icon { background: var(--kitty-blue); }
 .home-tile:nth-child(5n+4) .ht-icon { background: var(--kitty-yellow); }
 .home-tile:nth-child(5n+5) .ht-icon { background: var(--kitty-lav); }
-/* 批量操作栏：统一为裸粉主色，融入奶油主题 */
-.batch-bar { background: rgba(213,154,147,0.96); }
+/* 批量操作栏：随主题色变化 */
+.batch-bar { background: var(--primary-deep); }
+
+/* ===================== 风格切换器（一键切换四季+奶油） ===================== */
+.theme-picker {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  padding: 8px 4px;
+}
+.theme-opt {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.18s, border-color 0.18s;
+  box-shadow: var(--shadow-soft);
+  text-align: left;
+}
+.theme-opt:hover { transform: translateY(-2px); box-shadow: var(--sticker); border-color: var(--primary); }
+.theme-opt.active { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+.theme-opt .tp-dot {
+  width: 26px; height: 26px; border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06);
+}
+.theme-opt .tp-name {
+  font-size: 14px; font-weight: 600; color: var(--text);
+  line-height: 1.2;
+}
+.theme-opt .tp-sub {
+  font-size: 11px; color: var(--text-faint); margin-top: 2px;
+}
+/* 五种预览色 */
+.tp-cream  { background: conic-gradient(#FBF6F0 0% 50%, #E7B7B0 50% 80%, #F6E2DF 80% 100%); }
+.tp-spring { background: conic-gradient(#FBF2F2 0% 50%, #E0A8A8 50% 80%, #D6B8D6 80% 100%); }
+.tp-summer { background: conic-gradient(#F4F7F1 0% 50%, #98B088 50% 80%, #A8B898 80% 100%); }
+.tp-autumn { background: conic-gradient(#FAF3F0 0% 50%, #C07870 50% 80%, #B89080 80% 100%); }
+.tp-winter { background: conic-gradient(#F2F5F7 0% 50%, #7A9AB8 50% 80%, #90A8B8 80% 100%); }
+
+.sidebar-footer .theme-btn.active {
+  background: var(--primary-soft); color: var(--primary-deep);
+}
+
+@media (max-width: 420px) {
+  .theme-picker { grid-template-columns: 1fr; gap: 10px; }
+}

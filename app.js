@@ -243,6 +243,7 @@ const PRESETS = [
   timeFilter: "all",      // 时间筛选：all | 7d | 30d | year
   doubaoApiKey: "",       // 用户自填的火山方舟 API Key（仅存本机 localStorage，直连模式用）
   doubaoModel: "doubao-seed-1-6-250615",  // 豆包模型 ID
+  theme: "cream",         // 风格主题：cream | spring | summer | autumn | winter
 };
 
 /* UI 偏好持久化（不存知识内容，仅界面状态） */
@@ -259,6 +260,7 @@ function loadPrefs() {
     if (Array.isArray(p.recentIds)) state.recentIds = p.recentIds;
     if (typeof p.doubaoApiKey === "string") state.doubaoApiKey = p.doubaoApiKey;
     if (typeof p.doubaoModel === "string") state.doubaoModel = p.doubaoModel;
+    if (["cream","spring","summer","autumn","winter"].includes(p.theme)) state.theme = p.theme;
   } catch (_) {}
 }
 function savePrefs() {
@@ -273,7 +275,58 @@ function savePrefs() {
     view: state.view,
     doubaoApiKey: state.doubaoApiKey,
     doubaoModel: state.doubaoModel,
+    theme: state.theme,
   }));
+}
+
+/* 应用主题：同步到 <html> data-theme，供 CSS 变量读取 */
+function applyTheme() {
+  const t = ["cream","spring","summer","autumn","winter"].includes(state.theme) ? state.theme : "cream";
+  document.documentElement.dataset.theme = t === "cream" ? "" : t;
+  const btn = $("#themeBtn");
+  if (btn) btn.classList.toggle("active", t !== "cream");
+}
+
+/* 打开风格选择面板 */
+function openThemePicker() {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.innerHTML = `
+    <div class="modal form-modal">
+      <div class="modal-head">
+        <div class="modal-title">🎨 切换风格</div>
+        <button class="modal-close" data-close>✕</button>
+      </div>
+      <div class="modal-body form-body">
+        <div class="theme-picker" id="themePicker"></div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector(".modal").onclick = (e) => e.stopPropagation();
+  overlay.onclick = () => overlay.remove();
+  overlay.querySelector("[data-close]").onclick = () => overlay.remove();
+
+  const themes = [
+    { id: "cream", name: "奶油浅系", sub: "当前默认 · 软萌裸粉", cls: "tp-cream" },
+    { id: "spring", name: "春日桃粉", sub: "桃花 · 柔粉", cls: "tp-spring" },
+    { id: "summer", name: "夏日荷绿", sub: "荷叶 · 清绿", cls: "tp-summer" },
+    { id: "autumn", name: "秋日枫红", sub: "枫叶 · 暖红", cls: "tp-autumn" },
+    { id: "winter", name: "冬日雪蓝", sub: "落雪 · 雾蓝", cls: "tp-winter" },
+  ];
+  const picker = $("#themePicker", overlay);
+  themes.forEach((th) => {
+    const btn = document.createElement("button");
+    btn.className = "theme-opt" + (state.theme === th.id ? " active" : "");
+    btn.innerHTML = `<span class="tp-dot ${th.cls}"></span><div><div class="tp-name">${th.name}</div><div class="tp-sub">${th.sub}</div></div>`;
+    btn.onclick = () => {
+      state.theme = th.id;
+      applyTheme();
+      savePrefs();
+      overlay.remove();
+      toast(`已切换到「${th.name}」`);
+    };
+    picker.appendChild(btn);
+  });
 }
 
 /* ---------- 初始化 ---------- */
@@ -282,6 +335,7 @@ async function init() {
   try { await openDB(); } catch (e) { console.warn("IndexedDB 打开失败：", e); }
   try { loadPrefs(); } catch (e) { console.warn("读取偏好失败：", e); }
   // 刷新后保留上次停留的视图（loadPrefs 已恢复 state.view），不强制跳回首页
+  try { applyTheme(); } catch (e) { console.warn("应用主题失败：", e); }
 
   // 2. 先以本地 IndexedDB 加载（离线 / file:// 也能用）
   try {
@@ -1853,9 +1907,9 @@ function bindGlobalEvents() {
   $("#exportTextBtn").onclick = () => exportAsText();
   $("#importBtn").onclick = () => $("#importFile").click();
   $("#offlineBtn").onclick = downloadOffline;
+  $("#themeBtn").onclick = openThemePicker;
   $("#settingsBtn").onclick = openSettings;
 
-  $("#settingsBtn").onclick = openSettings;
   $("#importFile").onchange = (e) => {
     const f = e.target.files[0];
     if (f) importData(f);

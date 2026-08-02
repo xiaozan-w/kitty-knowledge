@@ -6,31 +6,98 @@
   <title>🎀 碎知识 Kitty · 个人知识收纳</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎀</text></svg>" />
   <style>
-/* ===================== 🎀 碎知识 Kitty · Hello Kitty 粉紫主题 ===================== */
+/* ===================== 小琦的碎片库 · 奶油浅色系 / 四季一键切换 ===================== */
 :root {
-  --bg: #fef6f9;
-  --bg-soft: #fce8f0;
-  --sidebar-bg: linear-gradient(180deg, #fdd5e8 0%, #fce4f2 40%, #f9e0f5 100%);
-  --card: #ffffff;
-  --primary: #e8769f;
-  --primary-deep: #c9547e;
-  --primary-soft: #fdd5e8;
-  --accent: #d4a0d9;
-  --accent-soft: #f3e5f8;
-  --kitty-pink: #fdd5e8;
-  --kitty-purple: #d4a0d9;
-  --kitty-red: #e04b74;
-  --kitty-yellow: #ffd866;
-  --text: #5c3d5e;
-  --text-soft: #8a6b8c;
-  --text-faint: #b899ba;
-  --border: #f0d4e3;
-  --border-soft: #f8ecf2;
-  --shadow: 0 8px 28px rgba(224, 75, 116, 0.18);
-  --shadow-soft: 0 4px 16px rgba(224, 75, 116, 0.10);
-  --radius: 18px;
-  --radius-sm: 12px;
-  --capsule: 50px;
+  --bg: #FBF6F0;
+  --bg-soft: #F4ECE4;
+  --sidebar-bg: linear-gradient(180deg, #F7EDE6 0%, #FBF3EE 50%, #FFF8F3 100%);
+  --card: #FFFFFF;
+  --primary: #E7B7B0;
+  --primary-deep: #D59A93;
+  --primary-soft: #F6E2DF;
+  --accent: #C9B6C9;
+  --accent-soft: #EFE6EF;
+  --kitty-pink: #F6DCE0;
+  --kitty-purple: #D9C9E6;
+  --kitty-yellow: #F3E6BE;
+  --kitty-mint: #CFE9DC;
+  --kitty-blue: #D6E6F0;
+  --kitty-peach: #FBE0D2;
+  --kitty-lav: #E4DDEC;
+  --text: #6B5B58;
+  --text-soft: #9C8B88;
+  --text-faint: #C3B4B0;
+  --border: #EAD9D4;
+  --border-soft: #F3E7E2;
+  --shadow: 0 12px 30px rgba(214,160,154,0.18);
+  --shadow-soft: 0 6px 18px rgba(214,160,154,0.12);
+  --sticker: 0 8px 22px rgba(205,160,155,0.16), inset 0 0 0 1px rgba(255,255,255,0.65);
+  --radius: 26px;
+  --radius-sm: 16px;
+  --capsule: 999px;
+  --glow-1: rgba(231,183,176,0.10);
+  --glow-2: rgba(201,182,201,0.10);
+}
+
+[data-theme="spring"] {
+  --bg: #FBF2F2; --bg-soft: #F5E6E8;
+  --sidebar-bg: linear-gradient(180deg, #F9EAEC 0%, #FBF2F4 50%, #FDF8F8 100%);
+  --card: #FFFFFF;
+  --primary: #E0A8A8; --primary-deep: #C98A8A; --primary-soft: #F6DFE0;
+  --accent: #D6B8D6; --accent-soft: #EFE4EF;
+  --kitty-pink: #F6DCE4; --kitty-purple: #E4D6E8; --kitty-yellow: #F3E6D0;
+  --kitty-mint: #D8E8DE; --kitty-blue: #D6E2F0; --kitty-peach: #FADBD2; --kitty-lav: #EBE0EC;
+  --text: #6B5458; --text-soft: #9C8588; --text-faint: #CAB4B6;
+  --border: #EAD0D0; --border-soft: #F3E2E2;
+  --shadow: 0 12px 30px rgba(200,150,150,0.18);
+  --shadow-soft: 0 6px 18px rgba(200,150,150,0.12);
+  --sticker: 0 8px 22px rgba(195,150,150,0.16), inset 0 0 0 1px rgba(255,255,255,0.65);
+  --glow-1: rgba(224,168,168,0.10); --glow-2: rgba(214,184,214,0.10);
+}
+[data-theme="summer"] {
+  --bg: #F4F7F1; --bg-soft: #E8EDE3;
+  --sidebar-bg: linear-gradient(180deg, #E8F0E4 0%, #F1F6EE 50%, #F8FBF6 100%);
+  --card: #FFFFFF;
+  --primary: #98B088; --primary-deep: #6F8A5E; --primary-soft: #DEE8D8;
+  --accent: #A8B898; --accent-soft: #E2EBDC;
+  --kitty-pink: #E8D4D8; --kitty-purple: #D4D4E0; --kitty-yellow: #E8E2C0;
+  --kitty-mint: #CFE9D8; --kitty-blue: #C8D8E0; --kitty-peach: #F0DCC8; --kitty-lav: #E0D8E8;
+  --text: #545A4E; --text-soft: #7F8778; --text-faint: #B4B8AE;
+  --border: #D0DCC8; --border-soft: #E2EBE0;
+  --shadow: 0 12px 30px rgba(130,150,120,0.18);
+  --shadow-soft: 0 6px 18px rgba(130,150,120,0.12);
+  --sticker: 0 8px 22px rgba(125,150,115,0.16), inset 0 0 0 1px rgba(255,255,255,0.65);
+  --glow-1: rgba(152,176,136,0.10); --glow-2: rgba(168,184,152,0.10);
+}
+[data-theme="autumn"] {
+  --bg: #FAF3F0; --bg-soft: #F1E6E2;
+  --sidebar-bg: linear-gradient(180deg, #F5E8E4 0%, #FAF2EF 50%, #FDF9F7 100%);
+  --card: #FFFFFF;
+  --primary: #C07870; --primary-deep: #9E534D; --primary-soft: #F0D9D5;
+  --accent: #B89080; --accent-soft: #EBDDD6;
+  --kitty-pink: #F2D2D0; --kitty-purple: #D8C8D0; --kitty-yellow: #F0D8A8;
+  --kitty-mint: #C8D8C8; --kitty-blue: #C8D4E0; --kitty-peach: #F5C8B8; --kitty-lav: #E4D8E0;
+  --text: #6B4E4A; --text-soft: #9C7D78; --text-faint: #C8B0AB;
+  --border: #E3C8C2; --border-soft: #F0E0DC;
+  --shadow: 0 12px 30px rgba(180,120,112,0.18);
+  --shadow-soft: 0 6px 18px rgba(180,120,112,0.12);
+  --sticker: 0 8px 22px rgba(175,120,112,0.16), inset 0 0 0 1px rgba(255,255,255,0.65);
+  --glow-1: rgba(192,120,112,0.10); --glow-2: rgba(184,144,128,0.10);
+}
+[data-theme="winter"] {
+  --bg: #F2F5F7; --bg-soft: #E6ECF0;
+  --sidebar-bg: linear-gradient(180deg, #E6EEF4 0%, #F2F6F9 50%, #F8FAFC 100%);
+  --card: #FFFFFF;
+  --primary: #7A9AB8; --primary-deep: #507090; --primary-soft: #D6E2EC;
+  --accent: #90A8B8; --accent-soft: #D8E4EC;
+  --kitty-pink: #EAD0D8; --kitty-purple: #D8D4E4; --kitty-yellow: #E8E0C0;
+  --kitty-mint: #C8E0E0; --kitty-blue: #C8DCE8; --kitty-peach: #E8D4D0; --kitty-lav: #DCD8E8;
+  --text: #4E5A64; --text-soft: #788590; --text-faint: #B0BAC2;
+  --border: #C8D6E0; --border-soft: #E2EBF0;
+  --shadow: 0 12px 30px rgba(110,140,160,0.18);
+  --shadow-soft: 0 6px 18px rgba(110,140,160,0.12);
+  --sticker: 0 8px 22px rgba(105,140,165,0.16), inset 0 0 0 1px rgba(255,255,255,0.65);
+  --glow-1: rgba(122,154,184,0.10); --glow-2: rgba(144,168,184,0.10);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -43,14 +110,13 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* 🎀 背景装饰：Hello Kitty 式条纹 + 蝴蝶结水印 */
+/* 背景：极淡柔光晕，随主题变化 */
 body::before {
   content: "";
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background:
-    repeating-linear-gradient(0deg, transparent, transparent 40px, rgba(253,213,232,0.06) 40px, rgba(253,213,232,0.06) 41px),
-    radial-gradient(ellipse at 20% 80%, rgba(212,160,217,0.08) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(253,213,232,0.12) 0%, transparent 50%);
+    radial-gradient(ellipse at 12% 88%, var(--glow-1) 0%, transparent 55%),
+    radial-gradient(ellipse at 88% 12%, var(--glow-2) 0%, transparent 55%);
   z-index: 0; pointer-events: none;
 }
 
@@ -725,6 +791,30 @@ body::before {
   font-size: 60px;
 }
 
+/* ===================== 风格切换器（四季+奶油） ===================== */
+.theme-picker {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 8px 4px;
+}
+.theme-opt {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--card); cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.18s, border-color 0.18s;
+  box-shadow: var(--shadow-soft); text-align: left;
+}
+.theme-opt:hover { transform: translateY(-2px); box-shadow: var(--sticker); border-color: var(--primary); }
+.theme-opt.active { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+.theme-opt .tp-dot { width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06); }
+.theme-opt .tp-name { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.2; }
+.theme-opt .tp-sub { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+.tp-cream  { background: conic-gradient(#FBF6F0 0% 50%, #E7B7B0 50% 80%, #F6E2DF 80% 100%); }
+.tp-spring { background: conic-gradient(#FBF2F2 0% 50%, #E0A8A8 50% 80%, #D6B8D6 80% 100%); }
+.tp-summer { background: conic-gradient(#F4F7F1 0% 50%, #98B088 50% 80%, #A8B898 80% 100%); }
+.tp-autumn { background: conic-gradient(#FAF3F0 0% 50%, #C07870 50% 80%, #B89080 80% 100%); }
+.tp-winter { background: conic-gradient(#F2F5F7 0% 50%, #7A9AB8 50% 80%, #90A8B8 80% 100%); }
+.sidebar-footer .theme-btn.active { background: var(--primary-soft); color: var(--primary-deep); }
+@media (max-width: 420px) { .theme-picker { grid-template-columns: 1fr; gap: 10px; } }
+
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
@@ -742,6 +832,7 @@ body::before {
         <button id="exportTextBtn" class="footer-btn">📄 导出文本</button>
         <button id="importBtn" class="footer-btn">⤒ 导入</button>
         <button id="offlineBtn" class="footer-btn offline-btn">⬇️ 离线版</button>
+        <button id="themeBtn" class="footer-btn theme-btn">🎨 风格</button>
         <button id="settingsBtn" class="footer-btn settings-btn">⚙️ 设置</button>
         <input type="file" id="importFile" accept=".json,.md,.txt,.markdown,application/json,text/markdown,text/plain" class="hidden" />
       </div>
@@ -961,6 +1052,7 @@ const PRESETS = [
   globalCollapsed: false,
   gdGroupCollapsed: {},   // 全局目录分组折叠态
   searchQuery: "",
+  theme: "cream",         // 风格主题：cream | spring | summer | autumn | winter
 };
 
 /* UI 偏好持久化（不存知识内容，仅界面状态） */
@@ -974,6 +1066,7 @@ function loadPrefs() {
     if (typeof p.activeSectionId === "string") state.activeSectionId = p.activeSectionId;
     if (p.view === "home" || p.view === "section" || p.view === "trash") state.view = p.view;
     if (p.gdGroupCollapsed) state.gdGroupCollapsed = p.gdGroupCollapsed;
+    if (["cream","spring","summer","autumn","winter"].includes(p.theme)) state.theme = p.theme;
   } catch (_) {}
 }
 function savePrefs() {
@@ -985,13 +1078,65 @@ function savePrefs() {
     gdGroupCollapsed: state.gdGroupCollapsed,
     activeSectionId: state.activeSectionId,
     view: state.view,
+    theme: state.theme,
   }));
+}
+
+/* 应用主题 */
+function applyTheme() {
+  const t = ["cream","spring","summer","autumn","winter"].includes(state.theme) ? state.theme : "cream";
+  document.documentElement.dataset.theme = t === "cream" ? "" : t;
+  const btn = $("#themeBtn");
+  if (btn) btn.classList.toggle("active", t !== "cream");
+}
+
+/* 打开风格选择面板 */
+function openThemePicker() {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.innerHTML = `
+    <div class="modal form-modal">
+      <div class="modal-head">
+        <div class="modal-title">🎨 切换风格</div>
+        <button class="modal-close" data-close>✕</button>
+      </div>
+      <div class="modal-body form-body">
+        <div class="theme-picker" id="themePicker"></div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector(".modal").onclick = (e) => e.stopPropagation();
+  overlay.onclick = () => overlay.remove();
+  overlay.querySelector("[data-close]").onclick = () => overlay.remove();
+
+  const themes = [
+    { id: "cream", name: "奶油浅系", sub: "当前默认 · 软萌裸粉", cls: "tp-cream" },
+    { id: "spring", name: "春日桃粉", sub: "桃花 · 柔粉", cls: "tp-spring" },
+    { id: "summer", name: "夏日荷绿", sub: "荷叶 · 清绿", cls: "tp-summer" },
+    { id: "autumn", name: "秋日枫红", sub: "枫叶 · 暖红", cls: "tp-autumn" },
+    { id: "winter", name: "冬日雪蓝", sub: "落雪 · 雾蓝", cls: "tp-winter" },
+  ];
+  const picker = $("#themePicker", overlay);
+  themes.forEach((th) => {
+    const btn = document.createElement("button");
+    btn.className = "theme-opt" + (state.theme === th.id ? " active" : "");
+    btn.innerHTML = `<span class="tp-dot ${th.cls}"></span><div><div class="tp-name">${th.name}</div><div class="tp-sub">${th.sub}</div></div>`;
+    btn.onclick = () => {
+      state.theme = th.id;
+      applyTheme();
+      savePrefs();
+      overlay.remove();
+      toast(`已切换到「${th.name}」`);
+    };
+    picker.appendChild(btn);
+  });
 }
 
 /* ---------- 初始化 ---------- */
 async function init() {
   await openDB();
   loadPrefs();
+  applyTheme();
 
   // 先以本地 IndexedDB 兜底加载（离线 / file:// 也能用）
   state.sections = await all_("sections");
@@ -2150,9 +2295,9 @@ function bindGlobalEvents() {
   $("#exportTextBtn").onclick = () => exportAsText();
   $("#importBtn").onclick = () => $("#importFile").click();
   $("#offlineBtn").onclick = downloadOffline;
+  $("#themeBtn").onclick = openThemePicker;
   $("#settingsBtn").onclick = openSettings;
 
-  $("#settingsBtn").onclick = openSettings;
   $("#importFile").onchange = (e) => {
     const f = e.target.files[0];
     if (f) importData(f);
