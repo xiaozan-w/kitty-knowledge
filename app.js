@@ -1785,11 +1785,15 @@ async function renderPreview(pane, rec) {
     } else if (rec.fileType === "pdf" && rec.blob && window.pdfjsLib) {
       const url = URL.createObjectURL(rec.blob);
       const pdf = await pdfjsLib.getDocument(url).promise;
+      const dpr = window.devicePixelRatio || 1;
+      const renderScale = 1.5 * dpr; // 高 DPI 渲染，避免被 CSS 放大而发虚
       for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);
-        const vp = page.getViewport({ scale: 1.25 });
+        const vp = page.getViewport({ scale: renderScale });
         const canvas = document.createElement("canvas");
         canvas.width = vp.width; canvas.height = vp.height;
+        canvas.style.width = (vp.width / dpr) + "px";
+        canvas.style.height = (vp.height / dpr) + "px";
         pane.appendChild(canvas);
         await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
       }
@@ -1799,6 +1803,88 @@ async function renderPreview(pane, rec) {
     }
   } catch (err) {
     pane.innerHTML = `<div class="preview-loading">预览失败：${esc(err.message)}</div>`;
+  }
+}
+
+// 网页内「查看原文件」：不下载，直接用浏览器原生能力在弹窗里看清晰原文件
+// PDF → 浏览器原生 PDF 查看器（iframe，清晰、可缩放翻页）；图片 → 全尺寸灯箱（多图可切换）
+function openOriginalViewer(rec) {
+  const root = $("#modalRoot");
+  const ov = document.createElement("div");
+  ov.className = "orig-overlay";
+  const isPdf = rec.fileType === "pdf" && rec.blob;
+  const imgs = (rec.fileType === "image")
+    ? (rec.images && rec.images.length ? rec.images : (rec.blob ? [{ blob: rec.blob, name: rec.fileName }] : []))
+    : [];
+  const hasImg = imgs.length > 0;
+  let revoke = () => {};
+
+  ov.innerHTML = `
+    <div class="orig-modal">
+      <div class="orig-head">
+        <span class="orig-title">${esc(rec.title)} · ${isPdf ? "PDF 原文件" : hasImg ? (imgs.length > 1 ? "图片原文件（" + imgs.length + " 张）" : "图片原文件") : "文件"}</span>
+        <button class="orig-close" title="关闭">×</button>
+      </div>
+      <div class="orig-body" id="origBody"></div>
+    </div>`;
+  root.appendChild(ov);
+  const close = () => { revoke(); ov.remove(); };
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  $(".orig-close", ov).onclick = close;
+
+  const body = $("#origBody", ov);
+
+  if (isPdf) {
+    const url = URL.createObjectURL(rec.blob);
+    revoke = () => URL.revokeObjectURL(url);
+    const frame = document.createElement("iframe");
+    frame.className = "orig-viewer";
+    frame.setAttribute("type", "application/pdf");
+    // toolbar=1 保留原生工具条（缩放/翻页），navpanes=0 隐藏侧栏，view=FitH 自适应宽度
+    frame.src = url + "#toolbar=1&navpanes=0&view=FitH";
+    body.appendChild(frame);
+  } else if (hasImg) {
+    body.classList.add("orig-imgs");
+    const stage = document.createElement("div");
+    stage.className = "orig-stage";
+    const thumbs = document.createElement("div");
+    thumbs.className = "orig-thumbs";
+    body.appendChild(stage);
+    body.appendChild(thumbs);
+    let cur = 0;
+    const show = (i) => {
+      cur = (i + imgs.length) % imgs.length;
+      const im = imgs[cur];
+      const url = URL.createObjectURL(im.blob);
+      stage.innerHTML = "";
+      const big = document.createElement("img");
+      big.className = "orig-big";
+      big.src = url;
+      big.onload = () => URL.revokeObjectURL(url);
+      stage.appendChild(big);
+      $$(".orig-thumb", thumbs).forEach((t, idx) => t.classList.toggle("active", idx === cur));
+    };
+    imgs.forEach((im, i) => {
+      const tu = URL.createObjectURL(im.blob);
+      const t = document.createElement("div");
+      t.className = "orig-thumb" + (i === 0 ? " active" : "");
+      const ti = document.createElement("img");
+      ti.src = tu;
+      ti.onload = () => URL.revokeObjectURL(tu);
+      t.appendChild(ti);
+      t.onclick = () => show(i);
+      thumbs.appendChild(t);
+    });
+    if (imgs.length > 1) {
+      const prev = document.createElement("button");
+      prev.className = "orig-nav prev"; prev.textContent = "‹"; prev.onclick = () => show(cur - 1);
+      const next = document.createElement("button");
+      next.className = "orig-nav next"; next.textContent = "›"; next.onclick = () => show(cur + 1);
+      stage.appendChild(prev); stage.appendChild(next);
+    }
+    show(0);
+  } else {
+    body.innerHTML = `<div class="preview-loading">没有可查看的原文件（该记录仅含文字摘要）</div>`;
   }
 }
 
@@ -1844,7 +1930,7 @@ function renderInfo(pane, rec) {
     <div class="info-actions">
       ${rec.deleted
         ? `<button class="btn-star" id="btnRestore">♻️ 恢复</button><button class="btn-del" id="btnPurge">🗑 彻底删除</button>`
-        : `<button class="btn-star" id="btnStar">${rec.starred ? "⭐ 已收藏" : "☆ 收藏"}</button><button class="btn-edit" id="btnEdit">✏️ 编辑</button>${(rec.fileType !== "text" && (rec.blob || (rec.fileType === "image" && rec.images && rec.images.length))) ? `<button class="btn-download" id="btnDownload">⬇ 下载原文件</button>` : ""}<button class="btn-del" id="btnDel">🗑 删除</button>`}
+        : `<button class="btn-star" id="btnStar">${rec.starred ? "⭐ 已收藏" : "☆ 收藏"}</button><button class="btn-edit" id="btnEdit">✏️ 编辑</button>${(rec.fileType !== "text" && (rec.blob || (rec.fileType === "image" && rec.images && rec.images.length))) ? `<button class="btn-download" id="btnDownload">⬇ 下载原文件</button><button class="btn-view-orig" id="btnViewOrig">🔍 查看原文件</button>` : ""}<button class="btn-del" id="btnDel">🗑 删除</button>`}
     </div>`;
 
   if (rec.deleted) {
@@ -1878,6 +1964,9 @@ function renderInfo(pane, rec) {
           toast("已下载原文件「" + (rec.fileName || "文件") + "」");
         }
       };
+    }
+    if ($("#btnViewOrig", pane)) {
+      $("#btnViewOrig", pane).onclick = () => openOriginalViewer(rec);
     }
     $("#btnDel", pane).onclick = () => { const ov = pane.closest(".modal-overlay"); ov.remove(); deleteRecord(rec.id); };
   }
