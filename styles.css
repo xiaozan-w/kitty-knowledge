@@ -575,6 +575,7 @@ body::before {
   z-index: 200;
   padding: 24px;
   animation: fade 0.2s ease;
+  touch-action: none; /* 禁止在此弹窗上触发整页捏合缩放 */
 }
 .orig-modal {
   width: min(1100px, 96vw); height: min(92vh, 960px);
@@ -603,8 +604,13 @@ body::before {
 .orig-viewer { width: 100%; height: 100%; border: 0; display: block; background: #f3eef4; }
 
 /* PDF 画布预览（移动端/无原生查看器时，避免强制下载） */
-.orig-pdf { display: flex; flex-direction: column; align-items: center; gap: 14px; overflow-y: auto; padding: 18px; background: #f3eef4; }
+.orig-pdf { display: flex; flex-direction: column; align-items: center; gap: 14px; overflow: auto; padding: 18px; background: #f3eef4; touch-action: pan-y; overscroll-behavior: contain; }
 .orig-hint { font-size: 12.5px; color: var(--text-faint); text-align: center; }
+.orig-zoombar { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 8px 12px; background: #fff; border-bottom: 1px solid var(--border-soft); flex-shrink: 0; }
+.orig-zoom-ctl { display: flex; align-items: center; gap: 8px; }
+.orig-zoom-ctl button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border-soft); background: var(--primary-soft); cursor: pointer; font-size: 16px; color: var(--text); line-height: 1; transition: background .15s; }
+.orig-zoom-ctl button:hover { background: #fff; }
+.orig-zoom-ctl .oz-val { font-size: 12.5px; min-width: 44px; text-align: center; color: var(--text-soft); }
 .orig-pdf-wrap { display: flex; flex-direction: column; align-items: center; gap: 16px; width: 100%; }
 .orig-pdf-wrap canvas { max-width: 100%; box-shadow: var(--shadow-soft); border-radius: 12px; background: #fff; }
 
@@ -614,6 +620,7 @@ body::before {
   flex: 1; min-height: 0; position: relative;
   display: flex; align-items: center; justify-content: center;
   overflow: auto; padding: 18px; background: #f3eef4;
+  touch-action: pan-y; overscroll-behavior: contain;
 }
 .orig-big { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: var(--shadow-soft); border-radius: 12px; background: #fff; }
 .orig-thumbs {

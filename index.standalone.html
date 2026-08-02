@@ -528,6 +528,7 @@ body::before {
   z-index: 200;
   padding: 24px;
   animation: fade 0.2s ease;
+  touch-action: none;
 }
 .orig-modal {
   width: min(1100px, 96vw); height: min(92vh, 960px);
@@ -554,8 +555,13 @@ body::before {
 .orig-close:hover { background: #fff; transform: rotate(90deg); }
 .orig-body { flex: 1; min-height: 0; position: relative; background: #faf6fb; }
 .orig-viewer { width: 100%; height: 100%; border: 0; display: block; background: #f3eef4; }
-.orig-pdf { display: flex; flex-direction: column; align-items: center; gap: 14px; overflow-y: auto; padding: 18px; background: #f3eef4; }
+.orig-pdf { display: flex; flex-direction: column; align-items: center; gap: 14px; overflow: auto; padding: 18px; background: #f3eef4; touch-action: pan-y; overscroll-behavior: contain; }
 .orig-hint { font-size: 12.5px; color: var(--text-faint); text-align: center; }
+.orig-zoombar { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 8px 12px; background: #fff; border-bottom: 1px solid var(--border-soft); flex-shrink: 0; }
+.orig-zoom-ctl { display: flex; align-items: center; gap: 8px; }
+.orig-zoom-ctl button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border-soft); background: var(--primary-soft); cursor: pointer; font-size: 16px; color: var(--text); line-height: 1; transition: background .15s; }
+.orig-zoom-ctl button:hover { background: #fff; }
+.orig-zoom-ctl .oz-val { font-size: 12.5px; min-width: 44px; text-align: center; color: var(--text-soft); }
 .orig-pdf-wrap { display: flex; flex-direction: column; align-items: center; gap: 16px; width: 100%; }
 .orig-pdf-wrap canvas { max-width: 100%; box-shadow: var(--shadow-soft); border-radius: 12px; background: #fff; }
 .orig-imgs { display: flex; flex-direction: column; }
@@ -2347,8 +2353,10 @@ async function openOriginalViewer(rec) {
       </div>
       <div class="orig-body" id="origBody"></div>
     </div>`;
+  const prevOverflow = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
   root.appendChild(ov);
-  const close = () => { revoke(); ov.remove(); };
+  const close = () => { revoke(); document.body.style.overflow = prevOverflow; ov.remove(); };
   ov.onclick = (e) => { if (e.target === ov) close(); };
   $(".orig-close", ov).onclick = close;
 
@@ -2361,27 +2369,49 @@ async function openOriginalViewer(rec) {
       || (window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
     if (isMobile && window.pdfjsLib) {
       body.classList.add("orig-pdf");
-      const hint = document.createElement("div");
-      hint.className = "orig-hint";
-      hint.textContent = "PDF 原文件 · 网页内预览（无需下载）— 上下滑动浏览，双指可缩放";
-      body.appendChild(hint);
+      let zoom = 1;
+      const toolbar = document.createElement("div");
+      toolbar.className = "orig-zoombar";
+      toolbar.innerHTML = `<span class="orig-hint">PDF 原文件 · 网页内预览（不下载）</span>
+        <span class="orig-zoom-ctl">
+          <button class="oz-minus" title="缩小">－</button>
+          <span class="oz-val">100%</span>
+          <button class="oz-plus" title="放大">＋</button>
+        </span>`;
+      body.appendChild(toolbar);
       const wrap = document.createElement("div");
       wrap.className = "orig-pdf-wrap";
       body.appendChild(wrap);
+      const canvases = [];
       try {
         const pdf = await pdfjsLib.getDocument(url).promise;
+        const containerW = Math.max(160, body.clientWidth - 36);
         const dpr = window.devicePixelRatio || 1;
-        const scale = 2 * dpr;
         for (let p = 1; p <= pdf.numPages; p++) {
           const page = await pdf.getPage(p);
-          const vp = page.getViewport({ scale });
+          const baseVp = page.getViewport({ scale: 1 });
+          const fit = containerW / baseVp.width;
+          const rscale = fit * dpr;
+          const vp = page.getViewport({ scale: rscale });
           const canvas = document.createElement("canvas");
           canvas.width = vp.width; canvas.height = vp.height;
-          canvas.style.width = (vp.width / dpr) + "px";
-          canvas.style.height = (vp.height / dpr) + "px";
+          const dispW = baseVp.width * fit, dispH = baseVp.height * fit;
+          canvas.style.width = dispW + "px";
+          canvas.style.height = dispH + "px";
+          canvas._base = { w: dispW, h: dispH };
           wrap.appendChild(canvas);
+          canvases.push(canvas);
           await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
         }
+        const applyZoom = () => {
+          canvases.forEach((c) => {
+            c.style.width = (c._base.w * zoom) + "px";
+            c.style.height = (c._base.h * zoom) + "px";
+          });
+          $(".oz-val", toolbar).textContent = Math.round(zoom * 100) + "%";
+        };
+        $(".oz-plus", toolbar).onclick = () => { zoom = Math.min(4, zoom + 0.25); applyZoom(); };
+        $(".oz-minus", toolbar).onclick = () => { zoom = Math.max(0.5, zoom - 0.25); applyZoom(); };
       } catch (e) {
         body.innerHTML = `<div class="preview-loading">PDF 预览失败：${esc(e.message)}</div>`;
       }

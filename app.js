@@ -1827,8 +1827,10 @@ async function openOriginalViewer(rec) {
       </div>
       <div class="orig-body" id="origBody"></div>
     </div>`;
+  const prevOverflow = document.body.style.overflow;
+  document.body.style.overflow = "hidden"; // 打开弹窗时锁住底层页面，避免整页被缩放/滚动
   root.appendChild(ov);
-  const close = () => { revoke(); ov.remove(); };
+  const close = () => { revoke(); document.body.style.overflow = prevOverflow; ov.remove(); };
   ov.onclick = (e) => { if (e.target === ov) close(); };
   $(".orig-close", ov).onclick = close;
 
@@ -1842,27 +1844,50 @@ async function openOriginalViewer(rec) {
       || (window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
     if (isMobile && window.pdfjsLib) {
       body.classList.add("orig-pdf");
-      const hint = document.createElement("div");
-      hint.className = "orig-hint";
-      hint.textContent = "PDF 原文件 · 网页内预览（无需下载）— 上下滑动浏览，双指可缩放";
-      body.appendChild(hint);
+      // 缩放工具条（缩放仅作用于弹窗内部，不影响整页）
+      let zoom = 1;
+      const toolbar = document.createElement("div");
+      toolbar.className = "orig-zoombar";
+      toolbar.innerHTML = `<span class="orig-hint">PDF 原文件 · 网页内预览（不下载）</span>
+        <span class="orig-zoom-ctl">
+          <button class="oz-minus" title="缩小">－</button>
+          <span class="oz-val">100%</span>
+          <button class="oz-plus" title="放大">＋</button>
+        </span>`;
+      body.appendChild(toolbar);
       const wrap = document.createElement("div");
       wrap.className = "orig-pdf-wrap";
       body.appendChild(wrap);
+      const canvases = [];
       try {
         const pdf = await pdfjsLib.getDocument(url).promise;
+        const containerW = Math.max(160, body.clientWidth - 36); // 适配弹窗宽度，比例不失调
         const dpr = window.devicePixelRatio || 1;
-        const scale = 2 * dpr; // 高清渲染，避免发虚
         for (let p = 1; p <= pdf.numPages; p++) {
           const page = await pdf.getPage(p);
-          const vp = page.getViewport({ scale });
+          const baseVp = page.getViewport({ scale: 1 });
+          const fit = containerW / baseVp.width;
+          const rscale = fit * dpr; // 按适配宽度 × 设备像素比高清渲染
+          const vp = page.getViewport({ scale: rscale });
           const canvas = document.createElement("canvas");
           canvas.width = vp.width; canvas.height = vp.height;
-          canvas.style.width = (vp.width / dpr) + "px";
-          canvas.style.height = (vp.height / dpr) + "px";
+          const dispW = baseVp.width * fit, dispH = baseVp.height * fit;
+          canvas.style.width = dispW + "px";
+          canvas.style.height = dispH + "px";
+          canvas._base = { w: dispW, h: dispH };
           wrap.appendChild(canvas);
+          canvases.push(canvas);
           await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
         }
+        const applyZoom = () => {
+          canvases.forEach((c) => {
+            c.style.width = (c._base.w * zoom) + "px";
+            c.style.height = (c._base.h * zoom) + "px";
+          });
+          $(".oz-val", toolbar).textContent = Math.round(zoom * 100) + "%";
+        };
+        $(".oz-plus", toolbar).onclick = () => { zoom = Math.min(4, zoom + 0.25); applyZoom(); };
+        $(".oz-minus", toolbar).onclick = () => { zoom = Math.max(0.5, zoom - 0.25); applyZoom(); };
       } catch (e) {
         body.innerHTML = `<div class="preview-loading">PDF 预览失败：${esc(e.message)}</div>`;
       }
