@@ -1806,9 +1806,9 @@ async function renderPreview(pane, rec) {
   }
 }
 
-// 网页内「查看原文件」：不下载，直接用浏览器原生能力在弹窗里看清晰原文件
-// PDF → 浏览器原生 PDF 查看器（iframe，清晰、可缩放翻页）；图片 → 全尺寸灯箱（多图可切换）
-function openOriginalViewer(rec) {
+// 网页内「查看原文件」：不下载，直接在弹窗里看清晰原文件
+// 图片 → 全尺寸灯箱（多图可切换）；PDF → 桌面用原生查看器(iframe)，移动端用 pdf.js 渲染高清画布（避免手机强制下载）
+async function openOriginalViewer(rec) {
   const root = $("#modalRoot");
   const ov = document.createElement("div");
   ov.className = "orig-overlay";
@@ -1837,12 +1837,43 @@ function openOriginalViewer(rec) {
   if (isPdf) {
     const url = URL.createObjectURL(rec.blob);
     revoke = () => URL.revokeObjectURL(url);
-    const frame = document.createElement("iframe");
-    frame.className = "orig-viewer";
-    frame.setAttribute("type", "application/pdf");
-    // toolbar=1 保留原生工具条（缩放/翻页），navpanes=0 隐藏侧栏，view=FitH 自适应宽度
-    frame.src = url + "#toolbar=1&navpanes=0&view=FitH";
-    body.appendChild(frame);
+    // 移动端（或精确指针设备）的浏览器对 iframe 内 PDF 会强制下载/跳出，改用 pdf.js 渲染高清画布，彻底不下载
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent)
+      || (window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+    if (isMobile && window.pdfjsLib) {
+      body.classList.add("orig-pdf");
+      const hint = document.createElement("div");
+      hint.className = "orig-hint";
+      hint.textContent = "PDF 原文件 · 网页内预览（无需下载）— 上下滑动浏览，双指可缩放";
+      body.appendChild(hint);
+      const wrap = document.createElement("div");
+      wrap.className = "orig-pdf-wrap";
+      body.appendChild(wrap);
+      try {
+        const pdf = await pdfjsLib.getDocument(url).promise;
+        const dpr = window.devicePixelRatio || 1;
+        const scale = 2 * dpr; // 高清渲染，避免发虚
+        for (let p = 1; p <= pdf.numPages; p++) {
+          const page = await pdf.getPage(p);
+          const vp = page.getViewport({ scale });
+          const canvas = document.createElement("canvas");
+          canvas.width = vp.width; canvas.height = vp.height;
+          canvas.style.width = (vp.width / dpr) + "px";
+          canvas.style.height = (vp.height / dpr) + "px";
+          wrap.appendChild(canvas);
+          await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+        }
+      } catch (e) {
+        body.innerHTML = `<div class="preview-loading">PDF 预览失败：${esc(e.message)}</div>`;
+      }
+    } else {
+      // 桌面端：用浏览器原生查看器（清晰、可缩放翻页、不下载）
+      const frame = document.createElement("iframe");
+      frame.className = "orig-viewer";
+      frame.setAttribute("type", "application/pdf");
+      frame.src = url + "#toolbar=1&navpanes=0&view=FitH";
+      body.appendChild(frame);
+    }
   } else if (hasImg) {
     body.classList.add("orig-imgs");
     const stage = document.createElement("div");
