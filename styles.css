@@ -604,7 +604,7 @@ body::before {
 .field input:focus, .field textarea:focus, .field select:focus {
   border-color: var(--primary); box-shadow: 0 0 0 4px var(--primary-soft);
 }
-.field textarea { resize: none; height: 232px; max-height: 232px; overflow-y: auto; line-height: 1.6; padding: 12px 14px; font-size: 14.5px; }
+.field textarea { resize: none; height: 232px; max-height: 232px; overflow-y: auto; line-height: 1.6; padding: 12px 14px; font-size: 14.5px; border-radius: var(--radius-sm); }
 .field .hint { font-size: 11px; color: var(--text-faint); margin-top: 6px; }
 .type-tabs { display: flex; gap: 10px; }
 .type-tab {
