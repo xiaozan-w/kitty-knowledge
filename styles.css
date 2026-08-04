@@ -203,6 +203,26 @@ body::before {
   border-radius: var(--capsule);
 }
 
+/* 排序控件：上/下移动 + 拖动手柄（手机常驻，桌面悬停显示） */
+.section-item .sec-reorder {
+  display: flex; align-items: center; gap: 1px;
+  opacity: 0; transition: opacity 0.18s; margin-left: 2px;
+}
+.section-item:hover .sec-reorder { opacity: 1; }
+@media (hover: none) { .section-item .sec-reorder { opacity: 1; } }   /* 触屏设备常驻显示 */
+.section-item .sec-move, .section-item .sec-grip {
+  border: none; background: transparent; cursor: pointer;
+  color: var(--text-faint); font-size: 15px; line-height: 1;
+  width: 22px; height: 24px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+}
+.section-item .sec-move:hover, .section-item .sec-grip:hover { background: rgba(0,0,0,0.06); color: var(--primary-deep); }
+.section-item .sec-grip { cursor: grab; font-size: 14px; touch-action: none; }   /* 触屏拖动，禁止页面滚动 */
+.section-item .sec-grip:active { cursor: grabbing; transform: scale(0.9); }
+.section-item.dragging { opacity: 0.4; box-shadow: var(--shadow-soft); }
+.section-item.drop-before, .section-item.drop-after { transition: background 0.1s; }
+
 .section-item.dragging { opacity: 0.4; }
 .section-item.long-pressing { transform: scale(0.96); background: var(--primary-soft); transition: transform 0.1s, background 0.1s; }
 .module-head.long-pressing { background: var(--primary-soft); border-radius: var(--radius); transition: background 0.1s; }

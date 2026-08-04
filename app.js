@@ -438,14 +438,27 @@ function renderSidebar() {
     item.innerHTML = `
       <span class="sec-icon">${esc(s.icon || "📁")}</span>
       <span class="sec-name">${esc(s.name)}</span>
-      <span class="sec-count">${count}</span>`;
-    item.onclick = () => {
+      <span class="sec-count">${count}</span>
+      <span class="sec-reorder">
+        <button class="sec-move" data-dir="up" title="上移">↑</button>
+        <button class="sec-move" data-dir="down" title="下移">↓</button>
+        <span class="sec-grip" title="按住拖动排序">⠿</span>
+      </span>`;
+    item.onclick = (e) => {
+      if (e.target.closest(".sec-reorder")) return;   // 点到排序控件不触发导航
       state.activeSectionId = s.id; state.view = "section"; savePrefs();
       if (window.innerWidth <= 820) { state.sidebarHidden = true; applySidebar(); }
       renderSidebar(); renderMain();
     };
+    // ↑/↓ 一步移动（手机 / 桌面通用，最稳）
+    $$(".sec-move", item).forEach((btn) => {
+      btn.onclick = (e) => { e.stopPropagation(); moveSection(s.id, btn.dataset.dir === "up" ? -1 : 1); };
+      btn.onmousedown = (e) => e.stopPropagation();          // 避免误触发原生拖拽
+      btn.ondragstart = (e) => e.preventDefault();
+    });
     bindSectionDnD(item, s.id);
     bindSectionLongPress(item, s.id);
+    bindSectionTouchSort(item, s.id);
     list.appendChild(item);
   }
   // 最近删除
@@ -491,6 +504,69 @@ function reorderSections(fromId, toId, after) {
   secs.splice(after ? idx + 1 : idx, 0, from);
   secs.forEach((s, i) => { s.order = i; put_("sections", s); });
   renderSidebar();
+}
+
+/* 板块排序：上/下移动一步（手机/桌面通用，最稳的排序方式） */
+function moveSection(id, dir) {
+  const secs = [...state.sections].sort((a, b) => a.order - b.order);
+  const i = secs.findIndex((s) => s.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= secs.length) return;
+  const a = secs[i], b = secs[j];
+  const t = a.order; a.order = b.order; b.order = t;
+  put_("sections", a); put_("sections", b);
+  renderSidebar();
+}
+
+/* 板块排序：触屏拖动（原生 HTML5 拖拽在手机上不触发，这里用 pointer 事件替代） */
+function bindSectionTouchSort(item, id) {
+  const grip = $(".sec-grip", item);
+  if (!grip) return;
+  grip.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse") return;   // 鼠标交给原生 DnD
+    e.stopPropagation();                      // 不触发板块长按菜单 / 点击导航
+    e.preventDefault();
+    startSectionTouchSort(e, item, id);
+  });
+}
+function startSectionTouchSort(downEv, item, id) {
+  const list = $("#sectionList");
+  let dragging = false;
+  const startY = downEv.clientY;
+  const clearHint = () => $$(".section-item", list).forEach((el) => el.classList.remove("drop-before", "drop-after"));
+  const move = (e) => {
+    if (!dragging) {
+      if (Math.abs(e.clientY - startY) < 6) return;
+      dragging = true; dragId = id;
+      item.classList.add("dragging");
+      if (navigator.vibrate) navigator.vibrate(30);
+    }
+    e.preventDefault();
+    const sibs = $$(".section-item", list).filter((el) => el !== item && !el.classList.contains("trash-item"));
+    clearHint();
+    let target = null, after = false;
+    for (const sib of sibs) {
+      const r = sib.getBoundingClientRect();
+      if (e.clientY < r.top + r.height / 2) { target = sib; after = false; break; }
+      target = sib; after = true;
+    }
+    if (target) target.classList.add(after ? "drop-after" : "drop-before");
+  };
+  const up = () => {
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", up);
+    document.removeEventListener("pointercancel", up);
+    if (!dragging) return;
+    const tgt = $$(".section-item", list).find((el) => el.classList.contains("drop-before") || el.classList.contains("drop-after"));
+    const after = tgt ? tgt.classList.contains("drop-after") : false;
+    item.classList.remove("dragging");
+    clearHint();
+    dragId = null;
+    if (tgt) reorderSections(id, tgt.dataset.id, after);
+  };
+  document.addEventListener("pointermove", move, { passive: false });
+  document.addEventListener("pointerup", up);
+  document.addEventListener("pointercancel", up);
 }
 
 /* 板块长按删除 */
