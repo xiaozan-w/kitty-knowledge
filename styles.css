@@ -729,7 +729,15 @@ body::before {
   border: 1px solid var(--border-soft);
   -webkit-user-select: text; user-select: text;            /* 允许选中/长按复制 */
   -webkit-touch-callout: default; cursor: text;           /* 移动端长按弹出选择/复制菜单 */
+  /* 长摘要自身成为滚动容器：选区上下拖动时此框自带回滚，复制范围不受可视区限制 */
+  max-height: 52vh; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
+/* 摘要框自定义滚动条（裸粉，与全站一致） */
+.info-summary::-webkit-scrollbar { width: 7px; }
+.info-summary::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 999px; }
+.info-summary::-webkit-scrollbar-track { background: transparent; }
 .info-label-row { display: flex; align-items: center; justify-content: space-between; }
 .info-sum-copy {
   font-size: 11.5px; font-weight: 600; color: var(--primary-deep);
