@@ -1745,11 +1745,23 @@ async function openRecord(rid) {
         <button class="modal-close">×</button>
       </div>
       <div class="modal-body">
-        <div class="preview-pane" id="previewPane"><div class="preview-loading">加载中…</div></div>
+        <div class="preview-sect" id="previewSect">
+          <div class="preview-head" id="previewHead" title="点击收起/展开预览">
+            <span class="ph-arrow">▾</span>
+            <span class="ph-title">📄 文件预览</span>
+            <span class="ph-hint">点击收起</span>
+          </div>
+          <div class="preview-pane" id="previewPane"><div class="preview-loading">加载中…</div></div>
+        </div>
         <div class="info-pane" id="infoPane"></div>
       </div>
     </div>`;
   $("#modalRoot").appendChild(overlay);
+  $(".preview-head", overlay).onclick = () => {
+    const s = $("#previewSect", overlay);
+    const collapsed = s.classList.toggle("collapsed");
+    $(".ph-hint", s).textContent = collapsed ? "点击展开" : "点击收起";
+  };
   $(".modal-close", overlay).onclick = () => overlay.remove();
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 
@@ -1974,8 +1986,8 @@ function renderInfo(pane, rec) {
         : `<div style="font-size:12.5px;color:var(--text-faint)">未填写来源链接</div>`}
     </div>
     <div class="info-block">
-      <div class="info-label">内容摘要</div>
-      <div class="info-summary">${esc(rec.summary || "（这条记录还没有写摘要）")}</div>
+      <div class="info-label info-label-row"><span>内容摘要</span>${rec.summary ? `<button class="info-sum-copy" id="btnCopySummary">📋 复制</button>` : ""}</div>
+      <div class="info-summary" id="summaryBox">${esc(rec.summary || "（这条记录还没有写摘要）")}</div>
     </div>
     <div class="info-block">
       <div class="info-label">🔗 关联记录（跨领域串联）</div>
@@ -2023,6 +2035,23 @@ function renderInfo(pane, rec) {
     }
     if ($("#btnViewOrig", pane)) {
       $("#btnViewOrig", pane).onclick = () => openOriginalViewer(rec);
+    }
+    if ($("#btnCopySummary", pane)) {
+      $("#btnCopySummary", pane).onclick = async () => {
+        const txt = rec.summary || "";
+        if (!txt) { toast("没有可复制的摘要"); return; }
+        try {
+          await navigator.clipboard.writeText(txt);
+          toast("已复制摘要到剪贴板");
+        } catch (e) {
+          const ta = document.createElement("textarea");
+          ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0"; ta.style.left = "-9999px";
+          document.body.appendChild(ta); ta.focus(); ta.select();
+          try { document.execCommand("copy"); toast("已复制摘要"); }
+          catch (_) { toast("复制失败，可长按摘要文字手动选择复制"); }
+          ta.remove();
+        }
+      };
     }
     $("#btnDel", pane).onclick = () => { const ov = pane.closest(".modal-overlay"); ov.remove(); deleteRecord(rec.id); };
   }
